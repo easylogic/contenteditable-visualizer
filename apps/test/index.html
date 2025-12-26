@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContentEditable Visualizer Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    .editor-container {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 300px;
+      margin-bottom: 30px;
+      background: white;
+    }
+
+    .editor-container:focus-within {
+      border-color: #3b82f6;
+    }
+
+    [contenteditable] {
+      outline: none;
+      min-height: 200px;
+      line-height: 1.6;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    button.primary {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    button.primary:hover {
+      background: #2563eb;
+    }
+
+    .info {
+      background: #f3f4f6;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .info code {
+      background: #e5e7eb;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>ContentEditable Visualizer Test</h1>
+
+  <div class="info">
+    <p>This is a test app for the ContentEditable Visualizer SDK.</p>
+    <p>Click the floating button (🔍) in the bottom-right corner to open the visualizer panel.</p>
+    <p>Try typing, selecting text, or using IME composition to see events and visualizations.</p>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="capture-snapshot">Capture Snapshot</button>
+    <button id="clear-events">Clear Events</button>
+    <button id="clear-snapshots">Clear Snapshots</button>
+    <button id="export-data">Export Data</button>
+    <button id="toggle-visualization">Toggle Visualization</button>
+  </div>
+
+  <div class="editor-container">
+    <div contenteditable="true" id="editor">
+      <p>Start typing here to see the visualizer in action!</p>
+      <p>Try selecting text, using keyboard shortcuts, or IME composition.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+

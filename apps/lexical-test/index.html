@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lexical Visualizer Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      background: white;
+      color: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #111827;
+        color: #f9fafb;
+      }
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    .editor-container {
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 300px;
+      margin-bottom: 30px;
+      background: white;
+    }
+
+    .editor-container:focus-within {
+      border-color: #3b82f6;
+    }
+
+    .editor-input {
+      outline: none;
+      min-height: 200px;
+      line-height: 1.6;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    button.primary {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    button.primary:hover {
+      background: #2563eb;
+    }
+
+    .info {
+      background: #f3f4f6;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Lexical Visualizer Test</h1>
+
+  <div class="info">
+    <p>This is a test app for the ContentEditable Visualizer SDK with Lexical.</p>
+    <p>Click the floating button (🔍) in the bottom-right corner to open the visualizer panel.</p>
+    <p>Note: Lexical requires React, so this is a simplified version using contenteditable directly.</p>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="capture-snapshot">Capture Snapshot</button>
+    <button id="clear-events">Clear Events</button>
+    <button id="export-data">Export Data</button>
+  </div>
+
+  <div class="editor-container">
+    <div contenteditable="true" id="editor" class="editor-input">
+      <p>Start typing here to see the visualizer in action! 🎉</p>
+      <p>Try selecting text, using keyboard shortcuts, or IME composition.</p>
+      <p>Special characters: © ® ™ € £ ¥ § ¶ † ‡ • … — – "quotes" 'apostrophes'</p>
+      <p>Emojis: 😀 😃 😄 😁 😆 😅 😂 🤣 🥲 🥹 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎</p>
+      <p>Line breaks and whitespace:<br>Line 1<br>Line 2<br>Line 3</p>
+      <p>Non-breaking space: Hello&nbsp;World&nbsp;Test</p>
+      <p>Tab character: Start→→→End</p>
+      <p>Regular spaces: Hello World Test Multiple&nbsp;&nbsp;&nbsp;Spaces</p>
+      <p>Zero-width characters: Hello&#8203;&#8204;&#8205;World&#65279;</p>
+      <p>Mixed content: <strong>Bold</strong> and <em>italic</em> and <u>underline</u></p>
+      <p>Non-editable content: <span contenteditable="false" style="background: #f0f0f0; padding: 2px 4px; border-radius: 2px;">This is not editable</span> but this is editable.</p>
+      <p>More non-editable: <span contenteditable="false" style="color: red;">🔒 Locked</span> content here.</p>
+      <p>Unicode: 中文 日本語 한국어 العربية русский</p>
+      <p>Math symbols: ∑ ∫ √ ∞ ≈ ≠ ≤ ≥ ± × ÷</p>
+      <p>Empty paragraphs:</p>
+      <p></p>
+      <p>Whitespace only:     </p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+
