@@ -2,6 +2,7 @@ import type { EventLog } from '../core/event-logger';
 import type { Snapshot } from '../core/snapshot-manager';
 import type { FloatingPanelConfig } from '../types';
 import { removeStyles, getFloatingPanelStyles, injectStyles } from './styles';
+import { extractLastSets, createPhaseBlock } from './event-viewer-utils';
 
 export type FloatingPanelOptions = FloatingPanelConfig;
 
@@ -31,6 +32,7 @@ export class FloatingPanel {
   private snapshotViewer: HTMLElement | null = null;
   
   private snapshotCount: number = 0;
+  private recentSnapshot: Snapshot | null = null; // Track recent snapshot for event viewer styling
   
   private isResizing = false;
   private resizeStartX = 0;
@@ -138,7 +140,7 @@ export class FloatingPanel {
 
   private createPanel(): HTMLElement {
     const panel = document.createElement('div');
-    panel.className = 'cev-panel';
+    panel.className = 'cev-panel dark'; // Always use dark theme
     panel.style.display = 'none';
     panel.style.width = `${this.options.panelWidth}px`;
     panel.style.height = `${this.options.panelHeight}px`;
@@ -378,8 +380,7 @@ export class FloatingPanel {
     
     const position = this.options.position || 'bottom-right';
     const buttonRect = this.container.getBoundingClientRect();
-    const panelWidth = this.options.panelWidth;
-    const panelHeight = this.options.panelHeight;
+    const panelWidth = this.panel.offsetWidth; // Use actual rendered width
     const padding = 12;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
@@ -492,50 +493,201 @@ export class FloatingPanel {
       return;
     }
 
-    // Show events in reverse order (newest first)
-    const reversedEvents = [...events].reverse();
-    reversedEvents.forEach(event => {
-      const item = this.createEventItem(event);
-      this.eventViewer!.appendChild(item);
-    });
-  }
+    // Create phase container (DevTools style)
+    const phaseContainer = document.createElement('div');
+    phaseContainer.className = 'cev-phases';
+    this.eventViewer.appendChild(phaseContainer);
 
-  private createEventItem(event: EventLog): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'cev-event-item';
+    // Sort events by timestamp
+    const sortedAll = [...events].sort((a, b) => a.timestamp - b.timestamp);
 
-    const header = document.createElement('div');
-    header.className = 'cev-event-header';
+    // Extract last composition/beforeinput/input set
+    const sets = extractLastSets(sortedAll, 1);
+    let targetLogs: EventLog[] | null = null;
 
-    const type = document.createElement('div');
-    type.className = 'cev-event-type';
-    type.textContent = event.type;
-
-    const time = document.createElement('div');
-    time.className = 'cev-event-time';
-    time.textContent = new Date(event.timestamp).toLocaleTimeString();
-
-    header.appendChild(type);
-    header.appendChild(time);
-
-    const data = document.createElement('div');
-    data.className = 'cev-event-data';
-    const eventData: any = {
-      inputType: event.inputType,
-      data: event.data,
-      isComposing: event.isComposing,
-      startOffset: event.startOffset,
-      endOffset: event.endOffset,
-    };
-    if (event.targetRanges && event.targetRanges.length > 0) {
-      eventData.targetRanges = event.targetRanges;
+    if (sets.length > 0) {
+      targetLogs = sets[sets.length - 1];
     }
-    data.textContent = JSON.stringify(eventData, null, 2);
 
-    item.appendChild(header);
-    item.appendChild(data);
+    // Find last selectionchange
+    let lastSel: EventLog | null = null;
+    for (const log of sortedAll) {
+      if (log.type === 'selectionchange') {
+        lastSel = log;
+      }
+    }
 
-    return item;
+    // Find last composition events
+    let lastCompStart: EventLog | null = null;
+    let lastCompUpdate: EventLog | null = null;
+    let lastCompEnd: EventLog | null = null;
+    for (const log of sortedAll) {
+      if (log.type === 'compositionstart') {
+        lastCompStart = log;
+      } else if (log.type === 'compositionupdate') {
+        lastCompUpdate = log;
+      } else if (log.type === 'compositionend') {
+        lastCompEnd = log;
+      }
+    }
+
+    // Extract beforeinput and input from target logs
+    let lastBi: EventLog | null = null;
+    let lastIn: EventLog | null = null;
+
+    if (targetLogs) {
+      for (const log of targetLogs) {
+        if (log.type === 'beforeinput') {
+          lastBi = log;
+        } else if (log.type === 'input') {
+          lastIn = log;
+        }
+      }
+    }
+
+    const baseTextForPreview = (lastIn?.startContainerText ?? '').toString();
+
+    // Calculate timestamps and deltas
+    const timestamps: number[] = [];
+    if (lastCompStart?.timestamp != null) timestamps.push(lastCompStart.timestamp);
+    if (lastCompUpdate?.timestamp != null) timestamps.push(lastCompUpdate.timestamp);
+    if (lastCompEnd?.timestamp != null) timestamps.push(lastCompEnd.timestamp);
+    if (lastBi?.timestamp != null) timestamps.push(lastBi.timestamp);
+    if (lastIn?.timestamp != null) timestamps.push(lastIn.timestamp);
+    if (lastSel?.timestamp != null) timestamps.push(lastSel.timestamp);
+    const baseTs = timestamps.length > 0 ? Math.min(...timestamps) : null;
+
+    const compStartDelta = lastCompStart?.timestamp != null && baseTs != null 
+      ? lastCompStart.timestamp - baseTs 
+      : null;
+    const compUpdateDelta = lastCompUpdate?.timestamp != null && baseTs != null 
+      ? lastCompUpdate.timestamp - baseTs 
+      : null;
+    const compEndDelta = lastCompEnd?.timestamp != null && baseTs != null 
+      ? lastCompEnd.timestamp - baseTs 
+      : null;
+    const beforeDelta = lastBi?.timestamp != null && baseTs != null 
+      ? lastBi.timestamp - baseTs 
+      : null;
+    const inputDelta = lastIn?.timestamp != null && baseTs != null 
+      ? lastIn.timestamp - baseTs 
+      : null;
+    const selectionDelta = lastSel?.timestamp != null && baseTs != null 
+      ? lastSel.timestamp - baseTs 
+      : null;
+
+    // Create phase blocks in order: SELECTION → INPUT → BEFOREINPUT → COMPOSITION*
+    if (lastSel) {
+      const selectionBlock = createPhaseBlock('SELECTION', lastSel, baseTextForPreview, {
+        timestampMs: lastSel.timestamp ?? null,
+        deltaMs: selectionDelta,
+      });
+      if (selectionBlock) {
+        phaseContainer.appendChild(selectionBlock);
+      }
+    }
+
+    // Determine if we should apply abnormal styling based on recent snapshot
+    let inputExtraClass: string | undefined;
+    let scenarioInfo: string | null = null;
+    
+    if (this.recentSnapshot && this.recentSnapshot.trigger) {
+      const trigger = this.recentSnapshot.trigger;
+      const triggerDetail = this.recentSnapshot.triggerDetail || '';
+      
+      // Check if this event set matches the snapshot timestamp (within 100ms window)
+      const snapshotTime = this.recentSnapshot.timestamp;
+      const eventTime = lastIn?.timestamp ?? lastBi?.timestamp ?? null;
+      const timeDiff = eventTime && snapshotTime ? Math.abs(eventTime - snapshotTime) : Infinity;
+      
+      // If events are within 100ms of snapshot, apply styling
+      if (timeDiff < 100) {
+        inputExtraClass = 'cev-phase-block--abnormal';
+        
+        // Add specific class for range-mapping-fail
+        if (trigger === 'range-mapping-fail' || trigger.includes('range-mapping-fail')) {
+          inputExtraClass = 'cev-phase-block--range-mapping-fail';
+        }
+        
+        // Build scenario info
+        if (trigger) {
+          scenarioInfo = `⚠️ Scenario: ${trigger}`;
+          if (triggerDetail) {
+            scenarioInfo += ` - ${triggerDetail}`;
+          }
+        }
+      }
+    }
+
+    // Check for parent/node mismatch between beforeinput and input (only if no abnormal detection)
+    if (!inputExtraClass && lastBi && lastIn) {
+      const sameParent = (lastBi.parent?.id ?? '') === (lastIn.parent?.id ?? '');
+      const sameNode = (lastBi.node?.nodeName ?? '') === (lastIn.node?.nodeName ?? '');
+      
+      if (!sameParent || !sameNode) {
+        inputExtraClass = 'cev-phase-block--input-different';
+      }
+    }
+
+    if (lastIn) {
+      const inputBlock = createPhaseBlock('INPUT', lastIn, baseTextForPreview, {
+        extraClassName: inputExtraClass,
+        timestampMs: lastIn.timestamp ?? null,
+        deltaMs: inputDelta,
+        extraLines: scenarioInfo ? [scenarioInfo] : undefined,
+      });
+      if (inputBlock) {
+        phaseContainer.appendChild(inputBlock);
+      }
+    }
+
+    if (lastBi) {
+      const beforeBlock = createPhaseBlock('BEFOREINPUT', lastBi, baseTextForPreview, {
+        timestampMs: lastBi.timestamp ?? null,
+        deltaMs: beforeDelta,
+      });
+      if (beforeBlock) {
+        phaseContainer.appendChild(beforeBlock);
+      }
+    }
+
+    if (lastCompStart) {
+      const compStartBlock = createPhaseBlock('COMPOSITIONSTART', lastCompStart, baseTextForPreview, {
+        timestampMs: lastCompStart.timestamp ?? null,
+        deltaMs: compStartDelta,
+      });
+      if (compStartBlock) {
+        phaseContainer.appendChild(compStartBlock);
+      }
+    }
+
+    if (lastCompUpdate) {
+      const compUpdateBlock = createPhaseBlock('COMPOSITIONUPDATE', lastCompUpdate, baseTextForPreview, {
+        timestampMs: lastCompUpdate.timestamp ?? null,
+        deltaMs: compUpdateDelta,
+      });
+      if (compUpdateBlock) {
+        phaseContainer.appendChild(compUpdateBlock);
+      }
+    }
+
+    if (lastCompEnd) {
+      const compEndBlock = createPhaseBlock('COMPOSITIONEND', lastCompEnd, baseTextForPreview, {
+        timestampMs: lastCompEnd.timestamp ?? null,
+        deltaMs: compEndDelta,
+      });
+      if (compEndBlock) {
+        phaseContainer.appendChild(compEndBlock);
+      }
+    }
+
+    // If no phases, show empty state
+    if (phaseContainer.children.length === 0) {
+      const emptyStateEl = document.createElement('div');
+      emptyStateEl.className = 'cev-empty-state';
+      emptyStateEl.textContent = 'No composition/beforeinput/input set';
+      phaseContainer.appendChild(emptyStateEl);
+    }
   }
 
   updateSnapshots(snapshots: Snapshot[]): void {
@@ -543,6 +695,9 @@ export class FloatingPanel {
 
     this.snapshotCount = snapshots.length;
     this.updateBadge();
+
+    // Store the most recent snapshot for event viewer styling
+    this.recentSnapshot = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
 
     this.snapshotViewer.innerHTML = '';
 
@@ -558,6 +713,13 @@ export class FloatingPanel {
       const item = this.createSnapshotItem(snapshot);
       this.snapshotViewer!.appendChild(item);
     });
+
+    // Refresh event viewer to apply snapshot-based styling
+    if (this.eventViewer && this.currentView === 'events') {
+      // Re-trigger updateEvents with current events (we'll need to store them)
+      // For now, we'll just update the styling of existing phase blocks
+      this.applySnapshotStyling();
+    }
   }
 
   /**

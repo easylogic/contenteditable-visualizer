@@ -1,3 +1,5 @@
+import { getElementId } from '../utils/element-id';
+
 export type SiblingInfo = {
   nodeName: string;
   id?: string;
@@ -43,14 +45,22 @@ export type EventLog = {
   rightSibling?: SiblingInfo | null;
   childIndex?: number;
   childCount?: number;
+  parentChildren?: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string }>; // All children in parent
 };
 
 function getNodeInfo(node: Node | null): EventLog['node'] {
   if (!node) return null;
   const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  
+  // Ensure element has an ID for tracking
+  let id: string | undefined;
+  if (el) {
+    id = getElementId(el);
+  }
+  
   return {
     nodeName: node.nodeName,
-    id: el?.id || undefined,
+    id: id || undefined,
     className: el?.className || undefined,
     textContent: node.textContent?.substring(0, 50) || undefined,
   };
@@ -60,9 +70,13 @@ function getParentInfo(node: Node | null): EventLog['parent'] {
   if (!node) return null;
   const parent = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
   if (!parent) return null;
+  
+  // Ensure parent has an ID for tracking
+  const id = getElementId(parent);
+  
   return {
     nodeName: parent.nodeName,
-    id: parent.id || undefined,
+    id: id || undefined,
     className: parent.className || undefined,
   };
 }
@@ -72,7 +86,7 @@ function getSiblingInfo(sibling: Node | null): SiblingInfo | null {
   const info: SiblingInfo = { nodeName: sibling.nodeName };
   if (sibling.nodeType === Node.ELEMENT_NODE) {
     const el = sibling as Element;
-    if (el.id) info.id = el.id;
+    info.id = getElementId(el);
     if (el.className) info.className = el.className;
   } else if (sibling.nodeType === Node.TEXT_NODE) {
     const text = sibling.textContent || '';
@@ -154,9 +168,10 @@ export class EventLogger {
   /**
    * Creates a new EventLogger instance
    * 
-   * @param maxLogs - Maximum number of logs to keep (0 = unlimited, default: 1000)
+   * @param maxLogs - Maximum number of logs to keep (0 = unlimited, default: 20)
+   *                   For DevTools-style viewer, we only need recent events to extract the last set
    */
-  constructor(maxLogs: number = 1000) {
+  constructor(maxLogs: number = 20) {
     this.maxLogs = maxLogs;
   }
 
@@ -259,6 +274,47 @@ export class EventLogger {
       }
       if (range.startContainer.nextSibling) {
         log.rightSibling = getSiblingInfo(range.startContainer.nextSibling);
+      }
+
+      // Capture element structure summary for context
+      // If startContainer is an element, check its children (e.g., P containing BR)
+      // Otherwise, check parent's children (but skip if parent is contenteditable)
+      let targetElement: Element | null = null;
+      
+      if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+        // startContainer itself is an element (e.g., P), check its children
+        targetElement = range.startContainer as Element;
+      } else {
+        // startContainer is a text node, check parent's children
+        const parent = range.startContainer.parentElement;
+        if (parent && parent.getAttribute('contenteditable') !== 'true') {
+          targetElement = parent;
+        }
+      }
+      
+      if (targetElement) {
+        const children = targetElement.childNodes;
+        const allChildren: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string }> = [];
+        
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          const childInfo: { index: number; nodeType: number; nodeName: string; tagName?: string } = {
+            index: i,
+            nodeType: child.nodeType,
+            nodeName: child.nodeName,
+          };
+          
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            childInfo.tagName = (child as Element).tagName;
+          }
+          
+          allChildren.push(childInfo);
+        }
+        
+        // Store all children (elements and text nodes) for context
+        if (allChildren.length > 0) {
+          log.parentChildren = allChildren;
+        }
       }
     }
 

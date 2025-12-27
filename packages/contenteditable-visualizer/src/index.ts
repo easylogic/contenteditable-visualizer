@@ -6,6 +6,7 @@ import { calculateDeletedRects, detectDomChanges, type DomChangeResult } from '.
 import { FloatingPanel, type FloatingPanelOptions } from './ui/floating-panel';
 import { throttle } from './utils/throttle';
 import { buildAiPrompt } from './utils/prompt-formatter';
+import { ensureSubtreeIds } from './utils/element-id';
 import type { ContentEditableVisualizerOptions, VisualizerColorScheme, RequiredVisualizerColorScheme, FloatingPanelConfig } from './types';
 
 /**
@@ -206,6 +207,13 @@ export class ContentEditableVisualizer {
         : this.options.panel;
       this.floatingPanel = new FloatingPanel(panelConfig);
       this.setupFloatingPanelUpdates();
+    }
+
+    // Ensure all elements in the contenteditable area have IDs for tracking
+    try {
+      ensureSubtreeIds(this.element, 20);
+    } catch (error) {
+      this.handleError(error instanceof Error ? error : new Error(String(error)), 'initialize.ensureIds');
     }
 
     this.attach();
