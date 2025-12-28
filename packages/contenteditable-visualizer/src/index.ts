@@ -513,6 +513,10 @@ export class ContentEditableVisualizer {
         const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
         if (!range || !this.element.contains(range.commonAncestorContainer)) {
+          // Clear visualization if selection is outside editor
+          if (this.options.visualize && this.rangeVisualizer) {
+            this.rangeVisualizer.drawRanges([]);
+          }
           return;
         }
 

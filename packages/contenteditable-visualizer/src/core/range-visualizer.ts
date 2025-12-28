@@ -108,7 +108,42 @@ export class RangeVisualizer {
             // Fallback: try to get position from start container
             const container = range.startContainer;
             const offset = range.startOffset;
-            if (container.nodeType === Node.TEXT_NODE) {
+            
+            // Handle Element nodes (e.g., contenteditable=false elements)
+            if (container.nodeType === Node.ELEMENT_NODE) {
+              const element = container as Element;
+              // For element nodes, offset is child index
+              // Try to get position from the element itself or its children
+              if (offset === 0) {
+                // Before first child - try to get position from element start
+                const tempRange = document.createRange();
+                tempRange.selectNodeContents(element);
+                tempRange.collapse(true);
+                const tempRects = tempRange.getClientRects();
+                if (tempRects.length > 0) {
+                  clientRects = tempRects;
+                }
+              } else if (offset < element.childNodes.length) {
+                // Before a specific child
+                const child = element.childNodes[offset];
+                const tempRange = document.createRange();
+                tempRange.setStartBefore(child);
+                tempRange.collapse(true);
+                const tempRects = tempRange.getClientRects();
+                if (tempRects.length > 0) {
+                  clientRects = tempRects;
+                }
+              } else {
+                // After last child
+                const tempRange = document.createRange();
+                tempRange.selectNodeContents(element);
+                tempRange.collapse(false);
+                const tempRects = tempRange.getClientRects();
+                if (tempRects.length > 0) {
+                  clientRects = tempRects;
+                }
+              }
+            } else if (container.nodeType === Node.TEXT_NODE) {
               const textNode = container as Text;
               // Create a minimal range at the exact cursor position (0 width)
               const tempRange = document.createRange();

@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "vite build",
@@ -29,6 +30,15 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/easylogic/contenteditable-visualizer.git",
+    "directory": "packages/contenteditable-visualizer"
+  },
+  "bugs": {
+    "url": "https://github.com/easylogic/contenteditable-visualizer/issues"
+  },
+  "homepage": "https://github.com/easylogic/contenteditable-visualizer#readme",
   "publishConfig": {
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

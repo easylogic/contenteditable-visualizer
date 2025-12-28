@@ -185,14 +185,30 @@ export function makeSelectionPreview(log: EventLog, baseTextForPreview: string):
   let end: number;
   
   if (isElementNode) {
+    // For Element nodes (including contenteditable=false):
+    // - offset represents child index in parent, not character position
+    // - If startContainer is the element itself, offset 0 = before first child
+    // - We can't meaningfully show text selection for element nodes
+    // - Instead, show the element's text content with offset info
+    const offset = log.startOffset ?? 0;
+    const endOffset = log.endOffset ?? offset;
+    
+    // For element nodes, we show the full text content
+    // but indicate that offset is a child index, not character position
     start = 0;
     end = baseText.length;
+    
+    // Note: If we wanted to show offset as child index, we could do:
+    // start = offset; // This would be misleading for text display
+    // Instead, we show full text and offset is displayed separately in the phase block
   } else if (isTextNode) {
+    // For Text nodes: offset is character position
     const len = baseText.length;
     start = Math.max(0, Math.min(len, log.startOffset ?? 0));
     const endRaw = log.endOffset ?? start;
     end = Math.max(start, Math.min(len, endRaw));
   } else {
+    // Fallback: treat as text node
     const len = baseText.length;
     start = Math.max(0, Math.min(len, log.startOffset ?? 0));
     const endRaw = log.endOffset ?? start;
@@ -268,13 +284,18 @@ export function createPhaseBlock(
   const parentName = log.parent?.nodeName || '';
   const parentId = log.parent?.id || '';
   const parentClass = log.parent?.className || '';
+  const parentContentEditable = log.parent?.contentEditable;
   const parentIdSegment = parentId ? formatIdForDisplay(parentId) : '';
   const parentClassSegment = parentClass ? `.${parentClass}` : '';
+  const parentContentEditableSegment = parentContentEditable === 'false' ? '[contenteditable=false]' : '';
+  
   const nodeName = log.node?.nodeName || '';
   const nodeId = log.node?.id || '';
   const nodeClass = log.node?.className || '';
+  const nodeContentEditable = log.node?.contentEditable;
   const nodeIdSegment = nodeId ? formatIdForDisplay(nodeId) : '';
   const nodeClassSegment = nodeClass ? `.${nodeClass}` : '';
+  const nodeContentEditableSegment = nodeContentEditable === 'false' ? '[contenteditable=false]' : '';
   
   // Determine parent/node variant based on beforeinput connection
   let parentVariant: 'before' | 'neutral' = 'neutral';
@@ -309,8 +330,8 @@ export function createPhaseBlock(
   const nodeVariantClass = nodeVariant === 'before' ? ' cev-node-tag--before' : '';
   
   const typeLine = `<span class="cev-phase-key">type:</span> ${escapeHtml(log.type)} (${escapeHtml(log.inputType || '-')})`;
-  const parentLine = `<span class="cev-phase-key">parent:</span> <span class="cev-parent-tag${parentVariantClass}">${escapeHtml(parentName)}</span><span class="cev-phase-id">${escapeHtml(parentIdSegment + parentClassSegment)}</span>`;
-  const nodeLine = `<span class="cev-phase-key">&nbsp;&nbsp;&nbsp;node:</span> <span class="cev-node-tag${nodeVariantClass}">${escapeHtml(nodeName)}</span><span class="cev-phase-id">${escapeHtml(nodeIdSegment + nodeClassSegment)}</span>`;
+  const parentLine = `<span class="cev-phase-key">parent:</span> <span class="cev-parent-tag${parentVariantClass}">${escapeHtml(parentName)}</span><span class="cev-phase-id">${escapeHtml(parentIdSegment + parentClassSegment + parentContentEditableSegment)}</span>`;
+  const nodeLine = `<span class="cev-phase-key">&nbsp;&nbsp;&nbsp;node:</span> <span class="cev-node-tag${nodeVariantClass}">${escapeHtml(nodeName)}</span><span class="cev-phase-id">${escapeHtml(nodeIdSegment + nodeClassSegment + nodeContentEditableSegment)}</span>`;
   
   const startOffsetValue = (log.startOffset ?? '').toString();
   const endOffsetValue = (log.endOffset ?? '').toString();
@@ -333,7 +354,8 @@ export function createPhaseBlock(
       if (child.nodeType === Node.TEXT_NODE) {
         return `#text[${child.index}]`;
       } else if (child.nodeType === Node.ELEMENT_NODE) {
-        return `${child.tagName || child.nodeName}[${child.index}]`;
+        const contentEditableSegment = child.contentEditable === 'false' ? '[contenteditable=false]' : '';
+        return `${child.tagName || child.nodeName}[${child.index}]${contentEditableSegment}`;
       } else {
         return `${child.nodeName}[${child.index}]`;
       }
@@ -370,6 +392,7 @@ export function createPhaseBlock(
   if (log.leftSibling) {
     const leftId = log.leftSibling.id ? ` <span class="cev-phase-id">${escapeHtml(formatIdForDisplay(log.leftSibling.id))}</span>` : '';
     const leftClass = log.leftSibling.className ? `.${escapeHtml(log.leftSibling.className)}` : '';
+    const leftContentEditable = log.leftSibling.contentEditable === 'false' ? ` <span class="cev-phase-id">[contenteditable=false]</span>` : '';
     let leftText = '';
     if (log.leftSibling.textPreview && log.leftSibling.nodeName === '#text') {
       // Normalize and highlight special characters like in selection preview
@@ -380,12 +403,13 @@ export function createPhaseBlock(
     }
     const leftName = log.leftSibling.nodeName === '#text' ? '#text' : escapeHtml(log.leftSibling.nodeName);
     const leftVariantClass = leftVariant === 'before' ? ' cev-node-tag--before' : '';
-    lines.push(`<span class="cev-phase-key">left:</span> <span class="cev-node-tag${leftVariantClass}">${leftName}</span><span class="cev-phase-id">${leftId}${leftClass}</span>${leftText}`);
+    lines.push(`<span class="cev-phase-key">left:</span> <span class="cev-node-tag${leftVariantClass}">${leftName}</span><span class="cev-phase-id">${leftId}${leftClass}</span>${leftContentEditable}${leftText}`);
   }
   
   if (log.rightSibling) {
     const rightId = log.rightSibling.id ? ` <span class="cev-phase-id">${escapeHtml(formatIdForDisplay(log.rightSibling.id))}</span>` : '';
     const rightClass = log.rightSibling.className ? `.${escapeHtml(log.rightSibling.className)}` : '';
+    const rightContentEditable = log.rightSibling.contentEditable === 'false' ? ` <span class="cev-phase-id">[contenteditable=false]</span>` : '';
     let rightText = '';
     if (log.rightSibling.textPreview && log.rightSibling.nodeName === '#text') {
       // Normalize and highlight special characters like in selection preview
@@ -396,7 +420,7 @@ export function createPhaseBlock(
     }
     const rightName = log.rightSibling.nodeName === '#text' ? '#text' : escapeHtml(log.rightSibling.nodeName);
     const rightVariantClass = rightVariant === 'before' ? ' cev-node-tag--before' : '';
-    lines.push(`<span class="cev-phase-key">right:</span> <span class="cev-node-tag${rightVariantClass}">${rightName}</span><span class="cev-phase-id">${rightId}${rightClass}</span>${rightText}`);
+    lines.push(`<span class="cev-phase-key">right:</span> <span class="cev-node-tag${rightVariantClass}">${rightName}</span><span class="cev-phase-id">${rightId}${rightClass}</span>${rightContentEditable}${rightText}`);
   }
   
   if (dataText) {

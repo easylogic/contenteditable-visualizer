@@ -1,10 +1,12 @@
 import { getElementId } from '../utils/element-id';
+import { getTextNodeId } from './text-node-tracker';
 
 export type SiblingInfo = {
   nodeName: string;
   id?: string;
   className?: string;
   textPreview?: string;
+  contentEditable?: string | null;
 };
 
 export type NodeInfo = {
@@ -12,6 +14,7 @@ export type NodeInfo = {
   id?: string;
   className?: string;
   textContent?: string;
+  contentEditable?: string | null; // 'true', 'false', 'inherit', or null
 };
 
 export type TargetRangeInfo = {
@@ -29,7 +32,7 @@ export type EventLog = {
   inputType?: string;
   data?: string | null;
   isComposing?: boolean;
-  parent: { nodeName: string; id?: string; className?: string } | null;
+  parent: { nodeName: string; id?: string; className?: string; contentEditable?: string | null } | null;
   node: NodeInfo | null;
   startOffset: number;
   startContainerText?: string;
@@ -45,24 +48,51 @@ export type EventLog = {
   rightSibling?: SiblingInfo | null;
   childIndex?: number;
   childCount?: number;
-  parentChildren?: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string }>; // All children in parent
+  parentChildren?: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string; contentEditable?: string | null }>; // All children in parent
 };
 
 function getNodeInfo(node: Node | null): EventLog['node'] {
   if (!node) return null;
-  const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
   
-  // Ensure element has an ID for tracking
   let id: string | undefined;
-  if (el) {
-    id = getElementId(el);
+  let className: string | undefined;
+  let contentEditable: string | null | undefined = undefined;
+  
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    // For Element nodes, use element's ID
+    const element = node as Element;
+    id = getElementId(element);
+    className = element.className || undefined;
+    
+    // Get contentEditable attribute value
+    const attr = element.getAttribute('contenteditable');
+    if (attr !== null) {
+      contentEditable = attr;
+    } else if ((element as HTMLElement).contentEditable) {
+      contentEditable = (element as HTMLElement).contentEditable;
+    }
+  } else if (node.nodeType === Node.TEXT_NODE) {
+    // For Text nodes, use text node's unique ID (not parent's ID)
+    // This allows distinguishing between different text nodes that share the same parent
+    const textNode = node as Text;
+    id = getTextNodeId(textNode);
+    
+    // Also get parent info for context
+    const parent = textNode.parentElement;
+    if (parent) {
+      className = parent.className || undefined;
+    }
   }
   
   return {
     nodeName: node.nodeName,
     id: id || undefined,
-    className: el?.className || undefined,
+    className: className,
     textContent: node.textContent?.substring(0, 50) || undefined,
+    contentEditable: contentEditable,
+    // Note: contenteditable=false elements can be startContainer/endContainer
+    // In that case, offset represents child index (0 = before first child, childCount = after last child)
+    // Note: Text nodes now have their own unique IDs to distinguish between siblings with the same parent
   };
 }
 
@@ -74,10 +104,20 @@ function getParentInfo(node: Node | null): EventLog['parent'] {
   // Ensure parent has an ID for tracking
   const id = getElementId(parent);
   
+  // Get contentEditable attribute value
+  let contentEditable: string | null | undefined = undefined;
+  const attr = parent.getAttribute('contenteditable');
+  if (attr !== null) {
+    contentEditable = attr;
+  } else if ((parent as HTMLElement).contentEditable) {
+    contentEditable = (parent as HTMLElement).contentEditable;
+  }
+  
   return {
     nodeName: parent.nodeName,
     id: id || undefined,
     className: parent.className || undefined,
+    contentEditable: contentEditable,
   };
 }
 
@@ -88,6 +128,14 @@ function getSiblingInfo(sibling: Node | null): SiblingInfo | null {
     const el = sibling as Element;
     info.id = getElementId(el);
     if (el.className) info.className = el.className;
+    
+    // Get contentEditable attribute value
+    const attr = el.getAttribute('contenteditable');
+    if (attr !== null) {
+      info.contentEditable = attr;
+    } else if ((el as HTMLElement).contentEditable) {
+      info.contentEditable = (el as HTMLElement).contentEditable;
+    }
   } else if (sibling.nodeType === Node.TEXT_NODE) {
     const text = sibling.textContent || '';
     info.textPreview = text.length > 20 ? text.substring(0, 20) + '...' : text;
@@ -251,11 +299,20 @@ export class EventLogger {
       log.startOffset = range.startOffset;
       log.startContainerText = range.startContainer.textContent?.substring(0, 100);
       
+      // Note: Browser differences for contenteditable=false elements:
+      // - Some browsers allow contenteditable=false elements as startContainer/endContainer
+      // - In that case, offset represents child index (0 = before first child, childCount = after last child)
+      // - This behavior may vary between Chrome, Firefox, Safari, and Edge
+      // - Mobile browsers (iOS Safari, Chrome Mobile) may have additional differences
+      
       if (!range.collapsed) {
         log.endParent = getParentInfo(range.endContainer);
         log.endNode = getNodeInfo(range.endContainer);
         log.endOffset = range.endOffset;
         log.endContainerText = range.endContainer.textContent?.substring(0, 100);
+      } else {
+        // For collapsed ranges, endOffset should equal startOffset
+        log.endOffset = range.startOffset;
       }
 
       log.startBoundary = checkBoundaryAtNode(range.startContainer, range.startOffset);
@@ -294,18 +351,27 @@ export class EventLogger {
       
       if (targetElement) {
         const children = targetElement.childNodes;
-        const allChildren: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string }> = [];
+        const allChildren: Array<{ index: number; nodeType: number; nodeName: string; tagName?: string; contentEditable?: string | null }> = [];
         
         for (let i = 0; i < children.length; i++) {
           const child = children[i];
-          const childInfo: { index: number; nodeType: number; nodeName: string; tagName?: string } = {
+          const childInfo: { index: number; nodeType: number; nodeName: string; tagName?: string; contentEditable?: string | null } = {
             index: i,
             nodeType: child.nodeType,
             nodeName: child.nodeName,
           };
           
           if (child.nodeType === Node.ELEMENT_NODE) {
-            childInfo.tagName = (child as Element).tagName;
+            const element = child as Element;
+            childInfo.tagName = element.tagName;
+            
+            // Get contentEditable attribute value
+            const attr = element.getAttribute('contenteditable');
+            if (attr !== null) {
+              childInfo.contentEditable = attr;
+            } else if ((element as HTMLElement).contentEditable) {
+              childInfo.contentEditable = (element as HTMLElement).contentEditable;
+            }
           }
           
           allChildren.push(childInfo);

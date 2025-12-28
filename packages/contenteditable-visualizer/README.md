@@ -534,6 +534,17 @@ type ExportData = {
 - ResizeObserver (for editor resize handling)
 - `getTargetRanges()` API (for beforeinput events)
 
+### Browser-Specific Behavior
+
+ContentEditable behavior, especially for `contenteditable="false"` elements, may vary between browsers:
+
+- **Chrome/Edge**: Generally consistent behavior. `contenteditable="false"` elements can be `startContainer`/`endContainer` in Range API.
+- **Firefox**: Similar to Chrome, but may handle edge cases differently.
+- **Safari**: May have different behavior, especially on iOS devices.
+- **Mobile browsers**: Additional variations due to different input methods and touch handling.
+
+**Important**: The SDK captures environment information (OS, browser, device) in snapshots to help identify browser-specific issues. Always test your implementation across different browsers and devices.
+
 ## Performance Considerations
 
 - **Selection Change Throttling**: Selection change events are throttled by default (100ms) to avoid performance issues. Adjust with `throttleSelection` option.
