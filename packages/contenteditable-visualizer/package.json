@@ -1,6 +1,6 @@
 {
   "name": "contenteditable-visualizer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SDK for visualizing and tracking contenteditable events, ranges, and DOM changes",
   "type": "module",
   "main": "./src/index.ts",
