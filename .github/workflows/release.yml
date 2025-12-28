@@ -34,6 +34,14 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          
+      - name: Configure npm registry for pnpm
+        run: |
+          # Create .npmrc in home directory for pnpm
+          # This will be used when changesets publishes to npm
+          echo "registry=https://registry.npmjs.org/" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+          echo "//registry.npmjs.org/:always-auth=true" >> ~/.npmrc
 
       - name: Get pnpm store directory
         shell: bash
@@ -55,12 +63,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: |
-            # Configure npm registry for pnpm before publishing
-            echo "registry=https://registry.npmjs.org/" > ~/.npmrc
-            echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
-            echo "//registry.npmjs.org/:always-auth=true" >> ~/.npmrc
-            pnpm release
+          publish: pnpm release
           version: pnpm version-packages
           commit: 'chore: version packages'
           title: 'chore: version packages'
