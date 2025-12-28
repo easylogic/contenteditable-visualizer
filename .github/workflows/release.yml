@@ -34,10 +34,13 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
       - name: Configure npm registry for pnpm
         run: |
           # Create .npmrc in home directory for pnpm
+          # setup-node creates .npmrc in project root, but pnpm looks in home directory
           # This will be used when changesets publishes to npm
           echo "registry=https://registry.npmjs.org/" > ~/.npmrc
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
