@@ -1,5 +1,5 @@
 ---
-"contenteditable-test": patch
+"contenteditable-visualizer": patch
 ---
 
 initialize project
