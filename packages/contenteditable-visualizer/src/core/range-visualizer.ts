@@ -171,13 +171,7 @@ export class RangeVisualizer {
         const startContainer = range.startContainer;
         const startOffset = range.startOffset;
         
-        if (startContainer.nodeType === Node.TEXT_NODE) {
-          const textNode = startContainer as Text;
-          if (startOffset === 0) {
-            startBoundary = true;
-          }
-        } else if (startContainer.nodeType === Node.ELEMENT_NODE) {
-          const element = startContainer as Element;
+        if (startContainer.nodeType === Node.TEXT_NODE || startContainer.nodeType === Node.ELEMENT_NODE) {
           if (startOffset === 0) {
             startBoundary = true;
           }

@@ -191,7 +191,6 @@ export function makeSelectionPreview(log: EventLog, baseTextForPreview: string):
     // - We can't meaningfully show text selection for element nodes
     // - Instead, show the element's text content with offset info
     const offset = log.startOffset ?? 0;
-    const endOffset = log.endOffset ?? offset;
     
     // For element nodes, we show the full text content
     // but indicate that offset is a child index, not character position
@@ -316,8 +315,6 @@ export function createPhaseBlock(
     }
   }
   
-  const isSelectionChange = log.type === 'selectionchange';
-  const isBeforeInput = log.type === 'beforeinput';
   const selectionPreviewInfo = makeSelectionPreview(log, baseTextForPreview);
   const selectionPreview = selectionPreviewInfo.html;
   

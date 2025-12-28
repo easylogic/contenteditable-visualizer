@@ -105,9 +105,10 @@ export class FloatingPanel {
     button.innerHTML = '🔍';
     button.setAttribute('aria-label', 'Toggle visualizer panel');
     button.style.position = 'relative';
-    button.style.width = `${this.options.toggleButtonSize}px`;
-    button.style.height = `${this.options.toggleButtonSize}px`;
-    button.style.borderRadius = `${this.options.toggleButtonSize / 2}px`;
+    const buttonSize = this.options.toggleButtonSize ?? 48;
+    button.style.width = `${buttonSize}px`;
+    button.style.height = `${buttonSize}px`;
+    button.style.borderRadius = `${buttonSize / 2}px`;
     button.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -715,13 +716,6 @@ export class FloatingPanel {
       const item = this.createSnapshotItem(snapshot);
       this.snapshotViewer!.appendChild(item);
     });
-
-    // Refresh event viewer to apply snapshot-based styling
-    if (this.eventViewer && this.currentView === 'events') {
-      // Re-trigger updateEvents with current events (we'll need to store them)
-      // For now, we'll just update the styling of existing phase blocks
-      this.applySnapshotStyling();
-    }
   }
 
   /**
