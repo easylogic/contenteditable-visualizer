@@ -386,6 +386,12 @@ export const floatingPanelStyles = {
       color: #e5e7eb;
     }
 
+    .cev-parent-tag--before {
+      border-color: rgba(56, 189, 248, 0.9);
+      background-color: rgba(8, 47, 73, 0.9);
+      color: #e0f2fe;
+    }
+
     .cev-node-tag {
       display: inline-block;
       padding: 0 4px;
@@ -395,6 +401,12 @@ export const floatingPanelStyles = {
       border: 1px solid rgba(148, 163, 184, 0.5);
       background-color: rgba(15, 23, 42, 0.4);
       color: #e5e7eb;
+    }
+
+    .cev-node-tag--before {
+      border-color: rgba(56, 189, 248, 0.8);
+      background-color: rgba(8, 47, 73, 0.7);
+      color: #e0f2fe;
     }
 
     .cev-snapshot-item {

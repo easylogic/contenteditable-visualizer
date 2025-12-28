@@ -581,6 +581,7 @@ export class FloatingPanel {
       const selectionBlock = createPhaseBlock('SELECTION', lastSel, baseTextForPreview, {
         timestampMs: lastSel.timestamp ?? null,
         deltaMs: selectionDelta,
+        beforeLog: lastBi, // Pass beforeinput log for variant detection
       });
       if (selectionBlock) {
         phaseContainer.appendChild(selectionBlock);
@@ -635,6 +636,7 @@ export class FloatingPanel {
         timestampMs: lastIn.timestamp ?? null,
         deltaMs: inputDelta,
         extraLines: scenarioInfo ? [scenarioInfo] : undefined,
+        beforeLog: lastBi, // Pass beforeinput log for variant detection
       });
       if (inputBlock) {
         phaseContainer.appendChild(inputBlock);

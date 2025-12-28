@@ -6,6 +6,18 @@
 import type { EventLog } from '../core/event-logger';
 
 /**
+ * Format ID for display - distinguishes tracking IDs from real DOM IDs
+ */
+function formatIdForDisplay(id: string): string {
+  // If it's our tracking ID (starts with 'cev-'), use different format
+  if (id.startsWith('cev-')) {
+    return `@${id}`; // Use @ prefix for tracking IDs
+  }
+  // Real DOM ID uses # prefix
+  return `#${id}`;
+}
+
+/**
  * Escape HTML special characters
  */
 function escapeHtml(value: string): string {
@@ -223,6 +235,7 @@ export function createPhaseBlock(
     timestampMs?: number | null;
     deltaMs?: number | null;
     extraLines?: string[];
+    beforeLog?: EventLog | null; // beforeinput log for variant detection
   }
 ): HTMLDivElement | null {
   if (!log) {
@@ -255,13 +268,32 @@ export function createPhaseBlock(
   const parentName = log.parent?.nodeName || '';
   const parentId = log.parent?.id || '';
   const parentClass = log.parent?.className || '';
-  const parentIdSegment = parentId ? `#${parentId}` : '';
+  const parentIdSegment = parentId ? formatIdForDisplay(parentId) : '';
   const parentClassSegment = parentClass ? `.${parentClass}` : '';
   const nodeName = log.node?.nodeName || '';
   const nodeId = log.node?.id || '';
   const nodeClass = log.node?.className || '';
-  const nodeIdSegment = nodeId ? `#${nodeId}` : '';
+  const nodeIdSegment = nodeId ? formatIdForDisplay(nodeId) : '';
   const nodeClassSegment = nodeClass ? `.${nodeClass}` : '';
+  
+  // Determine parent/node variant based on beforeinput connection
+  let parentVariant: 'before' | 'neutral' = 'neutral';
+  let nodeVariant: 'before' | 'neutral' = 'neutral';
+  
+  if (options?.beforeLog) {
+    const beforeParentId = options.beforeLog.parent?.id || '';
+    const beforeNodeId = options.beforeLog.node?.id || '';
+    
+    // Check if current parent matches beforeinput's parent or node
+    if (parentId && (parentId === beforeParentId || parentId === beforeNodeId)) {
+      parentVariant = 'before';
+    }
+    
+    // Check if current node matches beforeinput's parent or node
+    if (nodeId && (nodeId === beforeParentId || nodeId === beforeNodeId)) {
+      nodeVariant = 'before';
+    }
+  }
   
   const isSelectionChange = log.type === 'selectionchange';
   const isBeforeInput = log.type === 'beforeinput';
@@ -273,9 +305,12 @@ export function createPhaseBlock(
   const dataTextEscaped = escapeHtml(dataTextNormalized);
   const dataText = highlightSpecialChars(dataTextEscaped);
   
+  const parentVariantClass = parentVariant === 'before' ? ' cev-parent-tag--before' : '';
+  const nodeVariantClass = nodeVariant === 'before' ? ' cev-node-tag--before' : '';
+  
   const typeLine = `<span class="cev-phase-key">type:</span> ${escapeHtml(log.type)} (${escapeHtml(log.inputType || '-')})`;
-  const parentLine = `<span class="cev-phase-key">parent:</span> <span class="cev-parent-tag">${escapeHtml(parentName)}</span><span class="cev-phase-id">${escapeHtml(parentIdSegment + parentClassSegment)}</span>`;
-  const nodeLine = `<span class="cev-phase-key">&nbsp;&nbsp;&nbsp;node:</span> <span class="cev-node-tag">${escapeHtml(nodeName)}</span><span class="cev-phase-id">${escapeHtml(nodeIdSegment + nodeClassSegment)}</span>`;
+  const parentLine = `<span class="cev-phase-key">parent:</span> <span class="cev-parent-tag${parentVariantClass}">${escapeHtml(parentName)}</span><span class="cev-phase-id">${escapeHtml(parentIdSegment + parentClassSegment)}</span>`;
+  const nodeLine = `<span class="cev-phase-key">&nbsp;&nbsp;&nbsp;node:</span> <span class="cev-node-tag${nodeVariantClass}">${escapeHtml(nodeName)}</span><span class="cev-phase-id">${escapeHtml(nodeIdSegment + nodeClassSegment)}</span>`;
   
   const startOffsetValue = (log.startOffset ?? '').toString();
   const endOffsetValue = (log.endOffset ?? '').toString();
@@ -309,8 +344,31 @@ export function createPhaseBlock(
   }
   
   // Add left/right sibling info
+  // Check if siblings match beforeinput's node/parent for variant styling
+  let leftVariant: 'before' | 'neutral' = 'neutral';
+  let rightVariant: 'before' | 'neutral' = 'neutral';
+  
+  if (options?.beforeLog) {
+    const beforeNodeId = options.beforeLog.node?.id || '';
+    const beforeParentId = options.beforeLog.parent?.id || '';
+    
+    if (log.leftSibling) {
+      const leftId = log.leftSibling.id || '';
+      if (leftId && (leftId === beforeNodeId || leftId === beforeParentId)) {
+        leftVariant = 'before';
+      }
+    }
+    
+    if (log.rightSibling) {
+      const rightId = log.rightSibling.id || '';
+      if (rightId && (rightId === beforeNodeId || rightId === beforeParentId)) {
+        rightVariant = 'before';
+      }
+    }
+  }
+  
   if (log.leftSibling) {
-    const leftId = log.leftSibling.id ? ` <span class="cev-phase-id">#${escapeHtml(log.leftSibling.id)}</span>` : '';
+    const leftId = log.leftSibling.id ? ` <span class="cev-phase-id">${escapeHtml(formatIdForDisplay(log.leftSibling.id))}</span>` : '';
     const leftClass = log.leftSibling.className ? `.${escapeHtml(log.leftSibling.className)}` : '';
     let leftText = '';
     if (log.leftSibling.textPreview && log.leftSibling.nodeName === '#text') {
@@ -321,11 +379,12 @@ export function createPhaseBlock(
       leftText = ` <span class="cev-phase-text">"${highlighted}"</span>`;
     }
     const leftName = log.leftSibling.nodeName === '#text' ? '#text' : escapeHtml(log.leftSibling.nodeName);
-    lines.push(`<span class="cev-phase-key">left:</span> <span class="cev-node-tag">${leftName}</span><span class="cev-phase-id">${leftId}${leftClass}</span>${leftText}`);
+    const leftVariantClass = leftVariant === 'before' ? ' cev-node-tag--before' : '';
+    lines.push(`<span class="cev-phase-key">left:</span> <span class="cev-node-tag${leftVariantClass}">${leftName}</span><span class="cev-phase-id">${leftId}${leftClass}</span>${leftText}`);
   }
   
   if (log.rightSibling) {
-    const rightId = log.rightSibling.id ? ` <span class="cev-phase-id">#${escapeHtml(log.rightSibling.id)}</span>` : '';
+    const rightId = log.rightSibling.id ? ` <span class="cev-phase-id">${escapeHtml(formatIdForDisplay(log.rightSibling.id))}</span>` : '';
     const rightClass = log.rightSibling.className ? `.${escapeHtml(log.rightSibling.className)}` : '';
     let rightText = '';
     if (log.rightSibling.textPreview && log.rightSibling.nodeName === '#text') {
@@ -336,7 +395,8 @@ export function createPhaseBlock(
       rightText = ` <span class="cev-phase-text">"${highlighted}"</span>`;
     }
     const rightName = log.rightSibling.nodeName === '#text' ? '#text' : escapeHtml(log.rightSibling.nodeName);
-    lines.push(`<span class="cev-phase-key">right:</span> <span class="cev-node-tag">${rightName}</span><span class="cev-phase-id">${rightId}${rightClass}</span>${rightText}`);
+    const rightVariantClass = rightVariant === 'before' ? ' cev-node-tag--before' : '';
+    lines.push(`<span class="cev-phase-key">right:</span> <span class="cev-node-tag${rightVariantClass}">${rightName}</span><span class="cev-phase-id">${rightId}${rightClass}</span>${rightText}`);
   }
   
   if (dataText) {
