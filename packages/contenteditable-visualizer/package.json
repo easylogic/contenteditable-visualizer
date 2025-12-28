@@ -40,6 +40,8 @@
   },
   "homepage": "https://github.com/easylogic/contenteditable-visualizer#readme",
   "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
