@@ -190,7 +190,7 @@ export function makeSelectionPreview(log: EventLog, baseTextForPreview: string):
     // - If startContainer is the element itself, offset 0 = before first child
     // - We can't meaningfully show text selection for element nodes
     // - Instead, show the element's text content with offset info
-    const offset = log.startOffset ?? 0;
+    // const offset = log.startOffset ?? 0; // Not used for element nodes
     
     // For element nodes, we show the full text content
     // but indicate that offset is a child index, not character position
