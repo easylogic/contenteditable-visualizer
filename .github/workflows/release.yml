@@ -38,13 +38,10 @@ jobs:
       - name: Configure npm registry for pnpm
         run: |
           # Create .npmrc in home directory (pnpm looks here)
+          # Don't commit this file - it contains secrets
           echo "registry=https://registry.npmjs.org/" > ~/.npmrc
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
           echo "//registry.npmjs.org/:always-auth=true" >> ~/.npmrc
-          # Also create in project root for changesets
-          echo "registry=https://registry.npmjs.org/" > .npmrc
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-          echo "//registry.npmjs.org/:always-auth=true" >> .npmrc
 
       - name: Get pnpm store directory
         shell: bash
