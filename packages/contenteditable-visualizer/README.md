@@ -586,6 +586,169 @@ Snapshots automatically include AI prompts that can be used for debugging and an
 
 Access the AI prompt from the snapshot detail view in the floating panel, or via the `aiPrompt` field in the snapshot object.
 
+**Example AI Prompt:**
+
+```markdown
+# ContentEditable Event Analysis Request
+
+## Environment Information
+- OS: macOS 14.0
+- Browser: Chrome 120.0
+- Device: Desktop
+- Mobile: No
+
+## Snapshot Information
+- **Trigger**: \`auto\`
+- **Description**: Auto capture (on input event)
+- **Detail**: User typed 'hello'
+- **Timestamp**: 2024-01-15T10:30:45.123Z
+
+## Event Logs
+\`\`\`
+[0] selectionchange (t=1705315845123)
+  parent: P #editor
+  node: #text
+  offset: start=5, end=5
+  selection: "hello|"
+
+[1] beforeinput (t=1705315845125, Δ=2ms)
+  type: insertText
+  parent: P #editor
+  node: #text
+  offset: start=5, end=5
+  data: " "
+  selection: "hello |"
+
+[2] input (t=1705315845127, Δ=2ms)
+  type: insertText
+  parent: P #editor
+  node: #text
+  offset: start=6, end=6
+  data: " "
+  selection: "hello |"
+\`\`\`
+
+## Range Information
+\`\`\`
+Selection Range:
+  startContainer: #text
+  startOffset: 6
+  endContainer: #text
+  endOffset: 6
+  collapsed: true
+
+Input Range:
+  startContainer: #text
+  startOffset: 6
+  endContainer: #text
+  endOffset: 6
+  collapsed: true
+\`\`\`
+
+## DOM Change Results
+\`\`\`
+Added:
+  - Text node: " " (offset: 5)
+
+Modified:
+  - Text node: "hello" → "hello " (offset: 0)
+\`\`\`
+
+## DOM Structure
+
+### Before (beforeinput point)
+\`\`\`html
+<p id="editor">hello</p>
+\`\`\`
+
+### After (current state)
+\`\`\`html
+<p id="editor">hello </p>
+\`\`\`
+
+## Analysis Request
+
+### 1. Event Flow Analysis
+- Analyze event occurrence order and time intervals
+- Relationship between Selection, Composition, BeforeInput, and Input events
+- Track Range position changes between events
+
+### 2. DOM Change Analysis
+- Track Before DOM → After DOM changes
+- Text node addition/deletion/modification patterns
+- Timing and content of browser DOM changes
+
+### 3. Range Analysis
+- Compare Ranges at each point: Selection, Composition, BeforeInput, Input
+- Range position changes (offset, container)
+- Consistency between Range and actual DOM changes
+
+### 4. Problem Diagnosis
+- Analyze root causes if abnormal behavior exists
+- Mismatch points between browser behavior and expected behavior
+- Areas in editor implementation that need improvement
+
+### 5. Solution Proposal
+- Propose specific solutions
+- Code-level improvement suggestions (if possible)
+- Consider browser-specific issues
+
+## Notes
+
+### Terminology
+- **Selection Range**: Text range selected by the user
+- **Composition Range**: Range during IME input (Japanese, Chinese, Korean, etc.)
+- **BeforeInput Range**: Range at beforeinput event point
+- **Input Range**: Range at input event point
+- **DOM Change Result**: Text node level change tracking results
+
+### Event Sequence
+Typical input event flow:
+1. \`selectionchange\` - Selection area change
+2. \`compositionstart\` (for IME input) - IME input start
+3. \`compositionupdate\` (for IME input) - IME input update
+4. \`beforeinput\` - Before input (before browser DOM change)
+5. \`input\` - After input (after browser DOM change)
+6. \`compositionend\` (for IME input) - IME input end
+\`\`\`
+```
+
+**Usage:**
+
+```typescript
+// Capture a snapshot
+const snapshotId = await visualizer.captureSnapshot('manual', 'Debugging issue');
+
+// Get the snapshot with AI prompt
+const snapshot = await visualizer.getSnapshot(snapshotId);
+if (snapshot?.aiPrompt) {
+  // Copy to clipboard or send to AI service
+  await navigator.clipboard.writeText(snapshot.aiPrompt);
+  
+  // Or use with AI API
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert in contenteditable behavior and browser input events.',
+        },
+        {
+          role: 'user',
+          content: snapshot.aiPrompt,
+        },
+      ],
+    }),
+  });
+}
+```
+
 ### Panel Resizing
 
 The floating panel supports drag-to-resize functionality:
