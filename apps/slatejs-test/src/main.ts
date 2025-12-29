@@ -1,6 +1,7 @@
 import { createEditor, Descendant } from 'slate';
 import { Slate, Editable, withReact } from 'slate-react';
 import { createVisualizer } from 'contenteditable-visualizer';
+import { SlatePlugin } from '@contenteditable/slate';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -19,6 +20,7 @@ function App() {
   const [editor] = useState(() => withReact(createEditor()));
   const editorRef = useRef<HTMLDivElement>(null);
   const visualizerRef = useRef<ReturnType<typeof createVisualizer> | null>(null);
+  const pluginRef = useRef<SlatePlugin | null>(null);
 
   useEffect(() => {
     if (editorRef.current) {
@@ -31,9 +33,23 @@ function App() {
           panel: true,
           autoSnapshot: false,
         });
+
+        // Register Slate plugin
+        const plugin = new SlatePlugin({
+          config: {
+            trackOperations: true,
+            trackSelection: true,
+            trackDocument: true,
+            maxOperationHistory: 100,
+          },
+        });
+        
+        visualizerRef.current.registerPlugin(plugin, editor);
+        pluginRef.current = plugin;
+        console.log('Slate Plugin registered:', plugin.metadata.name);
       }
     }
-  }, []);
+  }, [editor]);
 
   const handleCaptureSnapshot = async () => {
     if (visualizerRef.current) {
@@ -58,7 +74,20 @@ function App() {
     if (visualizerRef.current) {
       try {
         const data = await visualizerRef.current.exportData();
-        const json = JSON.stringify(data, null, 2);
+        
+        // Include Slate plugin state
+        const slatePlugin = visualizerRef.current.getPlugin('slate');
+        const exportData = {
+          ...data,
+          ...(slatePlugin ? {
+            slate: {
+              state: slatePlugin.getState?.(),
+              events: slatePlugin.getEvents?.(),
+            },
+          } : {}),
+        };
+        
+        const json = JSON.stringify(exportData, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -165,6 +194,10 @@ const visualizer = createVisualizer(editorElement, {
   autoSnapshot: false,
 });
 
+// Note: Slate.js plugin requires a Slate Editor instance
+// For this simple test without React, we'll skip plugin registration
+// The plugin is demonstrated in the React version above
+
 document.getElementById('capture-snapshot')?.addEventListener('click', async () => {
   try {
     const id = await visualizer.captureSnapshot('manual', 'Slate.js snapshot');
@@ -183,7 +216,20 @@ document.getElementById('clear-events')?.addEventListener('click', () => {
 document.getElementById('export-data')?.addEventListener('click', async () => {
   try {
     const data = await visualizer.exportData();
-    const json = JSON.stringify(data, null, 2);
+    
+    // Include Slate plugin state if available
+    const slatePlugin = visualizer.getPlugin('slate');
+    const exportData = {
+      ...data,
+      ...(slatePlugin ? {
+        slate: {
+          state: slatePlugin.getState?.(),
+          events: slatePlugin.getEvents?.(),
+        },
+      } : {}),
+    };
+    
+    const json = JSON.stringify(exportData, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

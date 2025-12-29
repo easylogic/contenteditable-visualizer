@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "contenteditable-visualizer": "workspace:*",
+    "@contenteditable/prosemirror": "workspace:*",
     "prosemirror-model": "^1.20.0",
     "prosemirror-view": "^1.32.0",
     "prosemirror-state": "^1.4.3",

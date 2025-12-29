@@ -17,12 +17,6 @@ export default defineConfig({
       fileName: 'index',
       formats: ['es'],
     },
-    rollupOptions: {
-      output: {
-        preserveModules: true,
-        preserveModulesRoot: 'src',
-      },
-    },
     outDir: 'dist',
     sourcemap: true,
   },

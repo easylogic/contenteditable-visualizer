@@ -194,7 +194,7 @@ export class RangeVisualizer {
         }
       }
 
-      for (const r of clientRects) {
+      for (const r of Array.from(clientRects)) {
         // For collapsed ranges, allow 0 width to show cursor position
         if (r.width === 0 && r.height === 0 && !range.collapsed) continue;
 
@@ -411,7 +411,7 @@ export class RangeVisualizer {
 
       for (const element of nonEditableElements) {
         const rects = element.getClientRects();
-        for (const r of rects) {
+        for (const r of Array.from(rects)) {
           if (r.width === 0 && r.height === 0) continue;
 
           let x: number;

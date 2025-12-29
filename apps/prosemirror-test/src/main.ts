@@ -7,6 +7,7 @@ import { keymap } from 'prosemirror-keymap';
 import { history } from 'prosemirror-history';
 import { baseKeymap } from 'prosemirror-commands';
 import { createVisualizer } from 'contenteditable-visualizer';
+import { ProseMirrorPlugin } from '@contenteditable/prosemirror';
 
 const mySchema = new Schema({
   nodes: addListNodes(schema.spec.nodes, 'paragraph block*', 'block'),
@@ -62,7 +63,22 @@ const visualizer = createVisualizer(view.dom, {
   snapshots: true,
   panel: true,
   autoSnapshot: false,
+  container: document.body, // Use fixed positioning for ProseMirror
 });
+
+// Register ProseMirror plugin
+const prosemirrorPlugin = new ProseMirrorPlugin({
+  config: {
+    trackSteps: true,
+    trackSelection: true,
+    trackDocument: true,
+    maxTransactionHistory: 100,
+  },
+});
+
+visualizer.registerPlugin(prosemirrorPlugin, view);
+
+console.log('ProseMirror Plugin registered:', prosemirrorPlugin.metadata.name);
 
 // Button handlers
 document.getElementById('capture-snapshot')?.addEventListener('click', async () => {
@@ -83,7 +99,20 @@ document.getElementById('clear-events')?.addEventListener('click', () => {
 document.getElementById('export-data')?.addEventListener('click', async () => {
   try {
     const data = await visualizer.exportData();
-    const json = JSON.stringify(data, null, 2);
+    
+    // Include ProseMirror plugin state
+    const prosemirrorState = prosemirrorPlugin.getState();
+    const prosemirrorEvents = prosemirrorPlugin.getEvents();
+    
+    const exportData = {
+      ...data,
+      prosemirror: {
+        state: prosemirrorState,
+        events: prosemirrorEvents,
+      },
+    };
+    
+    const json = JSON.stringify(exportData, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -96,5 +125,21 @@ document.getElementById('export-data')?.addEventListener('click', async () => {
   }
 });
 
-console.log('ProseMirror Visualizer initialized');
+// Add button to show ProseMirror plugin state
+const showPluginStateBtn = document.createElement('button');
+showPluginStateBtn.textContent = 'Show ProseMirror State';
+showPluginStateBtn.style.margin = '10px';
+showPluginStateBtn.addEventListener('click', () => {
+  const state = prosemirrorPlugin.getState();
+  const events = prosemirrorPlugin.getEvents();
+  console.log('ProseMirror State:', state);
+  console.log('ProseMirror Events:', events);
+  console.log(`Total transactions: ${events.length}`);
+  if (events.length > 0) {
+    console.log('Last transaction:', events[events.length - 1]);
+  }
+});
+document.body.appendChild(showPluginStateBtn);
+
+console.log('ProseMirror Visualizer initialized with plugin');
 

@@ -356,7 +356,7 @@ const visualizer = createVisualizer(view.dom, {
 });
 
 // Register a ProseMirror plugin (from separate package)
-// import { ProseMirrorPlugin } from '@contenteditable-visualizer/prosemirror';
+// import { ProseMirrorPlugin } from '@contenteditable/prosemirror';
 // const plugin = new ProseMirrorPlugin();
 // visualizer.registerPlugin(plugin, view);
 ```
@@ -376,7 +376,7 @@ const visualizer = createVisualizer(editorElement, {
 });
 
 // Register a Slate plugin (from separate package)
-// import { SlatePlugin } from '@contenteditable-visualizer/slate';
+// import { SlatePlugin } from '@contenteditable/slate';
 // const plugin = new SlatePlugin();
 // visualizer.registerPlugin(plugin, editor);
 ```
@@ -1142,10 +1142,10 @@ protected onAttach(): void {
 
 Editor-specific plugins are distributed as separate packages:
 
-- `@contenteditable-visualizer/prosemirror` - ProseMirror integration
-- `@contenteditable-visualizer/slate` - Slate.js integration
-- `@contenteditable-visualizer/lexical` - Lexical integration
-- `@contenteditable-visualizer/editorjs` - Editor.js integration
+- `@contenteditable/prosemirror` - ProseMirror integration
+- `@contenteditable/slate` - Slate.js integration
+- `@contenteditable/lexical` - Lexical integration
+- `@contenteditable/editorjs` - Editor.js integration
 
 These packages provide pre-built plugins with editor-specific monitoring capabilities.
 

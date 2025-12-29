@@ -59,6 +59,9 @@ importers:
 
   apps/prosemirror-test:
     dependencies:
+      '@contenteditable/prosemirror':
+        specifier: workspace:*
+        version: link:../../packages/contenteditable/prosemirror
       contenteditable-visualizer:
         specifier: workspace:*
         version: link:../../packages/contenteditable-visualizer
@@ -96,6 +99,9 @@ importers:
 
   apps/slatejs-test:
     dependencies:
+      '@contenteditable/slate':
+        specifier: workspace:*
+        version: link:../../packages/contenteditable/slate
       contenteditable-visualizer:
         specifier: workspace:*
         version: link:../../packages/contenteditable-visualizer
@@ -121,6 +127,44 @@ importers:
         version: 5.4.21
 
   packages/contenteditable-visualizer:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.11
+        version: 5.4.21
+      vite-plugin-dts:
+        specifier: ^4.0.0
+        version: 4.5.4(rollup@4.54.0)(typescript@5.9.3)(vite@5.4.21)
+
+  packages/contenteditable/prosemirror:
+    dependencies:
+      contenteditable-visualizer:
+        specifier: workspace:*
+        version: link:../../contenteditable-visualizer
+      prosemirror-view:
+        specifier: ^1.0.0
+        version: 1.41.4
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.11
+        version: 5.4.21
+      vite-plugin-dts:
+        specifier: ^4.0.0
+        version: 4.5.4(rollup@4.54.0)(typescript@5.9.3)(vite@5.4.21)
+
+  packages/contenteditable/slate:
+    dependencies:
+      contenteditable-visualizer:
+        specifier: workspace:*
+        version: link:../../contenteditable-visualizer
+      slate:
+        specifier: ^0.100.0
+        version: 0.100.0
     devDependencies:
       typescript:
         specifier: ^5.6.3
@@ -810,6 +854,9 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
+  immer@10.2.0:
+    resolution: {integrity: sha512-d/+XTN3zfODyjr89gM3mPq1WNX2B8pYsu7eORitdwyA2sBubnTl3laYlBk4sXY5FUa5qTZGBDPJICVbvqzjlbw==}
+
   import-lazy@4.0.0:
     resolution: {integrity: sha512-rKtvo6a868b5Hu3heneU+L4yEQ4jYKLtjpnPeUdK7h0yzXGmyBTypknlkCvHFBqfX9YlorEiMM6Dnq/5atfHkw==}
     engines: {node: '>=8'}
@@ -829,6 +876,10 @@ packages:
   is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
+
+  is-plain-object@5.0.0:
+    resolution: {integrity: sha512-VRSzKkbMm5jMDoKLbltAkFQ5Qr7VDiTFGXxYFXXowVj387GeGNOCsOH6Msy00SGZ3Fp84b1Naa1psqgcCIEP5Q==}
+    engines: {node: '>=0.10.0'}
 
   is-subdir@1.2.0:
     resolution: {integrity: sha512-2AT6j+gXe/1ueqbW6fLZJiIw3F8iXGJtt0yDrZaBhAZEG1raiTxKWU+IPqMCzQAXOUCKdA4UDMgacKH25XG2Cw==}
@@ -1092,6 +1143,9 @@ packages:
     resolution: {integrity: sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==}
     engines: {node: '>=8'}
 
+  slate@0.100.0:
+    resolution: {integrity: sha512-cK+xwLBrbQof4rEfTzgC8loBWsDFEXq8nOBY7QahwY59Zq4bsBNcwiMw2VIzTv+WGNsmyHp4eAk/HJbz2aAUkQ==}
+
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
@@ -1133,6 +1187,9 @@ packages:
   term-size@2.2.1:
     resolution: {integrity: sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg==}
     engines: {node: '>=8'}
+
+  tiny-warning@1.0.3:
+    resolution: {integrity: sha512-lBN9zLN/oAf68o3zNXYrdCt1kP8WsiGW8Oo2ka41b2IM5JL/S1CTyX1rW0mb/zSuJun0ZUrDxx4sqvYS2FWzPA==}
 
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
@@ -1901,6 +1958,8 @@ snapshots:
 
   ignore@5.3.2: {}
 
+  immer@10.2.0: {}
+
   import-lazy@4.0.0: {}
 
   is-core-module@2.16.1:
@@ -1914,6 +1973,8 @@ snapshots:
       is-extglob: 2.1.1
 
   is-number@7.0.0: {}
+
+  is-plain-object@5.0.0: {}
 
   is-subdir@1.2.0:
     dependencies:
@@ -2187,6 +2248,12 @@ snapshots:
 
   slash@3.0.0: {}
 
+  slate@0.100.0:
+    dependencies:
+      immer: 10.2.0
+      is-plain-object: 5.0.0
+      tiny-warning: 1.0.3
+
   source-map-js@1.2.1: {}
 
   source-map@0.6.1: {}
@@ -2215,6 +2282,8 @@ snapshots:
   supports-preserve-symlinks-flag@1.0.0: {}
 
   term-size@2.2.1: {}
+
+  tiny-warning@1.0.3: {}
 
   to-regex-range@5.0.1:
     dependencies:
