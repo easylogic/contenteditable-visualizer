@@ -6,8 +6,8 @@ import { calculateDeletedRects, detectDomChanges, type DomChangeResult } from '.
 import { FloatingPanel, type FloatingPanelOptions } from './ui/floating-panel';
 import { throttle } from './utils/throttle';
 import { buildAiPrompt } from './utils/prompt-formatter';
-import { ensureSubtreeIds } from './utils/element-id';
 import type { ContentEditableVisualizerOptions, VisualizerColorScheme, RequiredVisualizerColorScheme, FloatingPanelConfig } from './types';
+import type { VisualizerPlugin } from './plugins/types';
 
 /**
  * Default color scheme for visualizations
@@ -83,6 +83,7 @@ export class ContentEditableVisualizer {
   private eventLogger: EventLogger;
   private snapshotManager: SnapshotManager;
   private floatingPanel: FloatingPanel | null = null;
+  private plugins: Map<string, VisualizerPlugin> = new Map();
 
   private beforeInputInfo: Map<string, any> | null = null;
   private beforeInputDeletedRects: DOMRect[] = [];
@@ -207,13 +208,6 @@ export class ContentEditableVisualizer {
         : this.options.panel;
       this.floatingPanel = new FloatingPanel(panelConfig);
       this.setupFloatingPanelUpdates();
-    }
-
-    // Ensure all elements in the contenteditable area have IDs for tracking
-    try {
-      ensureSubtreeIds(this.element, 20);
-    } catch (error) {
-      this.handleError(error instanceof Error ? error : new Error(String(error)), 'initialize.ensureIds');
     }
 
     this.attach();
@@ -547,6 +541,15 @@ export class ContentEditableVisualizer {
     this.element.addEventListener('compositionend', this.eventListeners.compositionend);
     document.addEventListener('selectionchange', this.eventListeners.selectionchange);
 
+    // Attach all registered plugins
+    this.plugins.forEach(plugin => {
+      try {
+        plugin.attach();
+      } catch (error) {
+        this.handleError(error instanceof Error ? error : new Error(String(error)), 'attach.plugin');
+      }
+    });
+
     this.isAttached = true;
   }
 
@@ -764,12 +767,73 @@ export class ContentEditableVisualizer {
   }
 
   /**
+   * Register an editor plugin
+   * @param plugin - The plugin instance
+   * @param editor - The editor instance (ProseMirror, Slate, etc.)
+   */
+  registerPlugin(plugin: VisualizerPlugin, editor: any): void {
+    try {
+      plugin.initialize(editor, this);
+      this.plugins.set(plugin.metadata.id, plugin);
+      
+      if (this.isAttached) {
+        plugin.attach();
+      }
+    } catch (error) {
+      this.handleError(error instanceof Error ? error : new Error(String(error)), 'registerPlugin');
+    }
+  }
+
+  /**
+   * Unregister a plugin
+   * @param pluginId - The plugin ID to unregister
+   */
+  unregisterPlugin(pluginId: string): void {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin) {
+      try {
+        plugin.detach();
+        plugin.destroy();
+        this.plugins.delete(pluginId);
+      } catch (error) {
+        this.handleError(error instanceof Error ? error : new Error(String(error)), 'unregisterPlugin');
+      }
+    }
+  }
+
+  /**
+   * Get a registered plugin
+   * @param pluginId - The plugin ID
+   * @returns The plugin instance or undefined
+   */
+  getPlugin(pluginId: string): VisualizerPlugin | undefined {
+    return this.plugins.get(pluginId);
+  }
+
+  /**
+   * Get all registered plugins
+   * @returns Array of plugin instances
+   */
+  getPlugins(): VisualizerPlugin[] {
+    return Array.from(this.plugins.values());
+  }
+
+  /**
    * Detaches event listeners and cleans up resources
    */
   detach(): void {
     if (!this.isAttached) return;
 
     try {
+      // Detach all plugins
+      this.plugins.forEach(plugin => {
+        try {
+          plugin.detach();
+        } catch (error) {
+          this.handleError(error instanceof Error ? error : new Error(String(error)), 'detach.plugin');
+        }
+      });
+
       this.element.removeEventListener('beforeinput', this.eventListeners.beforeinput);
       this.element.removeEventListener('input', this.eventListeners.input);
       this.element.removeEventListener('compositionstart', this.eventListeners.compositionstart);
@@ -816,6 +880,16 @@ export class ContentEditableVisualizer {
   destroy(): void {
     try {
       this.detach();
+
+      // Destroy all plugins
+      this.plugins.forEach(plugin => {
+        try {
+          plugin.destroy();
+        } catch (error) {
+          this.handleError(error instanceof Error ? error : new Error(String(error)), 'destroy.plugin');
+        }
+      });
+      this.plugins.clear();
 
       if (this.rangeVisualizer) {
         this.rangeVisualizer.destroy();
@@ -873,4 +947,13 @@ export type {
   FloatingPanelConfig,
 };
 export type { FloatingPanelPosition, FloatingPanelTheme } from './types';
+
+// Export plugins
+export { BasePlugin } from './plugins/base';
+export type { 
+  VisualizerPlugin, 
+  PluginMetadata, 
+  PluginOptions,
+  PluginEvents 
+} from './plugins/types';
 

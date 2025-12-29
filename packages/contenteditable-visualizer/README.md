@@ -13,6 +13,7 @@ SDK for visualizing and tracking contenteditable events, ranges, and DOM changes
 - 🔍 **Invisible Character Visualization** - Visualize zero-width spaces, line feeds, tabs, and other invisible characters
 - 📍 **Boundary Markers** - Visual indicators when selection is at text node or element boundaries
 - 🔌 **Framework Agnostic** - Pure TypeScript/DOM API, no React or other framework dependencies
+- 🔌 **Plugin System** - Extensible plugin system for editor-specific integrations (ProseMirror, Slate.js, etc.)
 - ⚡ **Performance Optimized** - Throttled selection changes, configurable log limits, efficient DOM tracking
 - 🎨 **Customizable** - Custom color schemes, panel sizing, container options, and error handling callbacks
 
@@ -353,6 +354,11 @@ const visualizer = createVisualizer(view.dom, {
   logEvents: true,
   container: document.body, // Use fixed positioning for ProseMirror
 });
+
+// Register a ProseMirror plugin (from separate package)
+// import { ProseMirrorPlugin } from '@contenteditable-visualizer/prosemirror';
+// const plugin = new ProseMirrorPlugin();
+// visualizer.registerPlugin(plugin, view);
 ```
 
 ### Integration with Slate.js
@@ -368,6 +374,11 @@ const visualizer = createVisualizer(editorElement, {
   visualize: true,
   logEvents: true,
 });
+
+// Register a Slate plugin (from separate package)
+// import { SlatePlugin } from '@contenteditable-visualizer/slate';
+// const plugin = new SlatePlugin();
+// visualizer.registerPlugin(plugin, editor);
 ```
 
 ### Integration with Editor.js
@@ -782,6 +793,361 @@ The floating panel supports drag-to-resize functionality:
 - Increase `throttleSelection` delay
 - Disable visualization if not needed: `visualize: false`
 - Disable floating panel if not needed: `panel: false`
+
+## Plugin System
+
+The SDK includes an extensible plugin system for editor-specific integrations. Editor-specific plugins are provided as separate packages (e.g., `@contenteditable-visualizer/prosemirror`, `@contenteditable-visualizer/slate`).
+
+> 📖 **For detailed plugin documentation, see [PLUGINS.md](./PLUGINS.md)**
+
+### Overview
+
+Plugins allow you to monitor editor-specific state and events beyond the standard DOM events. They integrate seamlessly with the visualizer's lifecycle and can provide additional context for debugging and analysis.
+
+**Key Features:**
+- Monitor editor-specific state changes (e.g., ProseMirror transactions, Slate operations)
+- Track editor events that aren't captured by standard DOM events
+- Provide editor state snapshots for AI prompt generation
+- Integrate with visualizer lifecycle (attach/detach/destroy)
+- Access visualizer instance for advanced integrations
+
+### Plugin Interface
+
+All plugins must implement the `VisualizerPlugin` interface:
+
+```typescript
+interface VisualizerPlugin {
+  readonly metadata: PluginMetadata;
+  initialize(editor: any, visualizer: ContentEditableVisualizer): void;
+  attach(): void;
+  detach(): void;
+  getState?(): any;
+  getEvents?(): any[];
+  destroy(): void;
+}
+```
+
+**Plugin Metadata:**
+```typescript
+interface PluginMetadata {
+  id: string;              // Unique plugin identifier
+  name: string;            // Human-readable plugin name
+  version: string;         // Plugin version
+  editor: string;          // Editor framework (e.g., 'prosemirror', 'slate')
+  description?: string;    // Optional description
+}
+```
+
+### BasePlugin Class
+
+The `BasePlugin` class provides a foundation for creating plugins with built-in lifecycle management:
+
+```typescript
+import { BasePlugin } from 'contenteditable-visualizer';
+import type { PluginMetadata, PluginOptions } from 'contenteditable-visualizer';
+
+class MyCustomPlugin extends BasePlugin {
+  readonly metadata: PluginMetadata = {
+    id: 'my-plugin',
+    name: 'My Custom Plugin',
+    version: '1.0.0',
+    editor: 'my-editor',
+    description: 'Custom plugin for my editor',
+  };
+
+  constructor(options: PluginOptions = {}) {
+    super(options);
+  }
+
+  // Called when plugin is initialized with editor and visualizer
+  protected onInitialize(): void {
+    // Access this.editor and this.visualizer here
+  }
+
+  // Called when plugin is attached (visualizer is active)
+  protected onAttach(): void {
+    // Set up event listeners, observers, etc.
+  }
+
+  // Called when plugin is detached (visualizer is paused)
+  protected onDetach(): void {
+    // Clean up event listeners, observers, etc.
+  }
+
+  // Called when plugin is destroyed
+  protected onDestroy(): void {
+    // Final cleanup
+  }
+
+  // Optional: Return current editor state
+  getState(): any {
+    return {
+      // Editor-specific state
+    };
+  }
+
+  // Optional: Return editor events since last snapshot
+  getEvents(): any[] {
+    return [
+      // Array of editor events
+    ];
+  }
+}
+```
+
+### Plugin Lifecycle
+
+Plugins follow a specific lifecycle that aligns with the visualizer:
+
+1. **Initialization** (`initialize`)
+   - Called when `registerPlugin()` is invoked
+   - Receives editor instance and visualizer instance
+   - Sets up internal references
+
+2. **Attachment** (`attach`)
+   - Called when visualizer is attached (or immediately if already attached)
+   - Set up event listeners, observers, etc.
+   - Start monitoring editor state
+
+3. **Detachment** (`detach`)
+   - Called when visualizer is detached
+   - Clean up event listeners, observers, etc.
+   - Stop monitoring (but keep plugin registered)
+
+4. **Destruction** (`destroy`)
+   - Called when plugin is unregistered or visualizer is destroyed
+   - Final cleanup of all resources
+   - Plugin cannot be reused after destruction
+
+### Creating a Custom Plugin
+
+Here's a complete example of a custom plugin:
+
+```typescript
+import { BasePlugin } from 'contenteditable-visualizer';
+import type { PluginMetadata, PluginOptions } from 'contenteditable-visualizer';
+import type { ContentEditableVisualizer } from 'contenteditable-visualizer';
+
+interface MyEditor {
+  on(event: string, handler: Function): void;
+  off(event: string, handler: Function): void;
+  getState(): any;
+  getHistory(): any[];
+}
+
+interface MyPluginOptions extends PluginOptions {
+  config?: {
+    trackHistory?: boolean;
+    maxHistorySize?: number;
+  };
+}
+
+class MyEditorPlugin extends BasePlugin {
+  readonly metadata: PluginMetadata = {
+    id: 'my-editor',
+    name: 'My Editor Plugin',
+    version: '1.0.0',
+    editor: 'my-editor',
+    description: 'Monitors My Editor state and events',
+  };
+
+  private editor: MyEditor | null = null;
+  private visualizer: ContentEditableVisualizer | null = null;
+  private eventHistory: any[] = [];
+  private handlers: Map<string, Function> = new Map();
+
+  constructor(options: MyPluginOptions = {}) {
+    super(options);
+  }
+
+  protected onInitialize(): void {
+    this.editor = this.editor as MyEditor;
+    this.visualizer = this.visualizer;
+    
+    // Initialize based on options
+    const config = this.options.config || {};
+    // ... setup based on config
+  }
+
+  protected onAttach(): void {
+    if (!this.editor) return;
+
+    // Set up event listeners
+    const changeHandler = (event: any) => {
+      this.eventHistory.push({
+        timestamp: Date.now(),
+        type: 'change',
+        data: event,
+      });
+      
+      // Keep history size limited
+      const maxSize = this.options.config?.maxHistorySize ?? 100;
+      if (this.eventHistory.length > maxSize) {
+        this.eventHistory.shift();
+      }
+    };
+
+    this.editor.on('change', changeHandler);
+    this.handlers.set('change', changeHandler);
+  }
+
+  protected onDetach(): void {
+    if (!this.editor) return;
+
+    // Remove event listeners
+    this.handlers.forEach((handler, event) => {
+      this.editor!.off(event, handler);
+    });
+    this.handlers.clear();
+  }
+
+  protected onDestroy(): void {
+    this.onDetach();
+    this.eventHistory = [];
+    this.editor = null;
+    this.visualizer = null;
+  }
+
+  getState(): any {
+    if (!this.editor) return null;
+    
+    return {
+      editorState: this.editor.getState(),
+      eventCount: this.eventHistory.length,
+    };
+  }
+
+  getEvents(): any[] {
+    return this.eventHistory.slice();
+  }
+}
+
+// Usage
+const plugin = new MyEditorPlugin({
+  enabled: true,
+  config: {
+    trackHistory: true,
+    maxHistorySize: 50,
+  },
+});
+
+visualizer.registerPlugin(plugin, myEditorInstance);
+
+// Later, get plugin state
+const state = plugin.getState();
+const events = plugin.getEvents();
+
+// Or access via visualizer
+const retrievedPlugin = visualizer.getPlugin('my-editor');
+if (retrievedPlugin) {
+  const pluginState = retrievedPlugin.getState?.();
+}
+```
+
+### Plugin Registration
+
+Plugins are registered with the visualizer instance:
+
+```typescript
+// Register a plugin
+visualizer.registerPlugin(plugin, editorInstance);
+
+// Get a specific plugin
+const plugin = visualizer.getPlugin('plugin-id');
+
+// Get all registered plugins
+const plugins = visualizer.getPlugins();
+
+// Unregister a plugin
+visualizer.unregisterPlugin('plugin-id');
+```
+
+**Important Notes:**
+- Plugins are automatically attached when the visualizer is attached
+- Plugins are automatically detached when the visualizer is detached
+- Plugins are automatically destroyed when the visualizer is destroyed
+- You can manually unregister plugins before visualizer destruction
+
+### Best Practices
+
+1. **Error Handling**
+   ```typescript
+   protected onAttach(): void {
+     try {
+       // Your attachment logic
+     } catch (error) {
+       console.error(`[${this.metadata.id}] Failed to attach:`, error);
+     }
+   }
+   ```
+
+2. **Resource Cleanup**
+   - Always clean up event listeners in `onDetach()`
+   - Clear timers, observers, and subscriptions
+   - Release references to prevent memory leaks
+
+3. **State Management**
+   - Keep plugin state separate from editor state
+   - Limit history/event arrays to prevent memory issues
+   - Use `getState()` and `getEvents()` for snapshot integration
+
+4. **Plugin Options**
+   - Use TypeScript interfaces for type-safe options
+   - Provide sensible defaults
+   - Validate options in constructor or `onInitialize()`
+
+5. **Visualizer Integration**
+   - Access visualizer methods when needed (e.g., `visualizer.captureSnapshot()`)
+   - Don't modify visualizer state directly
+   - Use visualizer's error handling if available
+
+### Plugin Options
+
+Plugins can accept configuration options:
+
+```typescript
+interface PluginOptions {
+  enabled?: boolean;           // Enable/disable plugin (default: true)
+  config?: Record<string, any>; // Plugin-specific configuration
+}
+
+// Usage
+const plugin = new MyPlugin({
+  enabled: true,
+  config: {
+    trackHistory: true,
+    maxSize: 100,
+  },
+});
+```
+
+### Accessing Visualizer from Plugin
+
+Plugins have access to the visualizer instance:
+
+```typescript
+protected onAttach(): void {
+  if (!this.visualizer) return;
+  
+  // Access visualizer methods
+  const logs = this.visualizer.getEventLogs();
+  const snapshots = await this.visualizer.getSnapshots();
+  
+  // Trigger snapshots programmatically
+  await this.visualizer.captureSnapshot('plugin', 'Plugin triggered snapshot');
+}
+```
+
+### Editor-Specific Plugins
+
+Editor-specific plugins are distributed as separate packages:
+
+- `@contenteditable-visualizer/prosemirror` - ProseMirror integration
+- `@contenteditable-visualizer/slate` - Slate.js integration
+- `@contenteditable-visualizer/lexical` - Lexical integration
+- `@contenteditable-visualizer/editorjs` - Editor.js integration
+
+These packages provide pre-built plugins with editor-specific monitoring capabilities.
 
 ## License
 
