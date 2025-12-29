@@ -1,5 +1,11 @@
 # contenteditable-visualizer
 
+## 0.1.4
+
+### Patch Changes
+
+- 13efc22: support plugin for prosemirror, slate
+
 ## 0.1.3
 
 ### Patch Changes
