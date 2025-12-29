@@ -1,6 +1,6 @@
 {
   "name": "@contenteditable/prosemirror",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ProseMirror plugin for contenteditable-visualizer",
   "type": "module",
   "main": "./src/index.ts",
@@ -63,4 +63,3 @@
     "registry": "https://registry.npmjs.org/"
   }
 }
-
