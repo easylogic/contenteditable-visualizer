@@ -6,6 +6,8 @@ import { calculateDeletedRects, detectDomChanges, type DomChangeResult } from '.
 import { FloatingPanel, type FloatingPanelOptions } from './ui/floating-panel';
 import { throttle } from './utils/throttle';
 import { buildAiPrompt } from './utils/prompt-formatter';
+import { AbnormalDetector, type PreviousSelection, type AbnormalDetection } from './core/abnormal-detector';
+import { extractEventPairs, type EventPair } from './core/event-pair';
 import type { ContentEditableVisualizerOptions, VisualizerColorScheme, RequiredVisualizerColorScheme, FloatingPanelConfig } from './types';
 import type { VisualizerPlugin } from './plugins/types';
 
@@ -89,6 +91,10 @@ export class ContentEditableVisualizer {
   private beforeInputDeletedRects: DOMRect[] = [];
   private isAttached = false;
   private scrollHandler: (() => void) | null = null;
+  // 비정상 감지 관련
+  private abnormalDetector: AbnormalDetector;
+  private lastInputSelection: PreviousSelection | null = null;
+  private lastBeforeInputSelection: PreviousSelection | null = null;
 
   private eventListeners: {
     beforeinput: (e: Event) => void;
@@ -200,6 +206,7 @@ export class ContentEditableVisualizer {
 
     this.eventLogger = new EventLogger(this.options.maxLogs);
     this.snapshotManager = new SnapshotManager();
+    this.abnormalDetector = new AbnormalDetector();
 
     if (this.options.panel) {
       // panel can be boolean or config object
@@ -339,6 +346,23 @@ export class ContentEditableVisualizer {
         try {
           this.beforeInputInfo = snapshotTextNodes(this.element);
           this.beforeInputDeletedRects = calculateDeletedRects(event, this.element);
+          
+          // Update selection state for abnormal detection
+          if (range) {
+            const logs = this.eventLogger.getLogs();
+            const beforeInputLog = logs[logs.length - 1]; // 가장 최근 로그 (방금 추가된 beforeinput 로그)
+            
+            if (beforeInputLog && beforeInputLog.type === 'beforeinput') {
+              this.lastBeforeInputSelection = {
+                parentId: beforeInputLog.parent?.id || '',
+                offset: beforeInputLog.startOffset,
+                endOffset: beforeInputLog.endOffset,
+                timestamp: beforeInputLog.timestamp,
+                textLength: beforeInputLog.startContainerText?.length,
+                textPreview: beforeInputLog.startContainerText?.substring(0, 50),
+              };
+            }
+          }
         } catch (error) {
           this.handleError(error instanceof Error ? error : new Error(String(error)), 'beforeinput.snapshot');
         }
@@ -403,17 +427,100 @@ export class ContentEditableVisualizer {
           }
         }
 
-        // Auto-capture snapshot if enabled
+        // Update selection state for abnormal detection
+        if (range) {
+          const logs = this.eventLogger.getLogs();
+          const inputLog = logs.find(log => 
+            log.type === 'input' && Math.abs(log.timestamp - Date.now()) < 10
+          ) || logs[logs.length - 1];
+          
+          if (inputLog && inputLog.type === 'input') {
+            this.lastInputSelection = {
+              parentId: inputLog.parent?.id || '',
+              offset: inputLog.startOffset,
+              endOffset: inputLog.endOffset,
+              timestamp: inputLog.timestamp,
+              textLength: inputLog.startContainerText?.length,
+              textPreview: inputLog.startContainerText?.substring(0, 50),
+            };
+          }
+        }
+
+        // Auto-detect abnormal situations and capture snapshot
         if (this.options.autoSnapshot && this.options.snapshots) {
           try {
             const logs = this.eventLogger.getLogs();
+            
+            // Extract event pairs and detect abnormalities
+            const eventPairs = extractEventPairs(logs);
+            const abnormalDetections: Array<{
+              eventPair: EventPair;
+              detection: AbnormalDetection;
+            }> = [];
+            
+            let detectedTrigger: SnapshotTrigger | undefined;
+            let detectedDetail: string | undefined;
+            let scenarioId: string | undefined;
+            let scenarioDescription: string | undefined;
+            
+            // Analyze the most recent event pair
+            if (eventPairs.length > 0) {
+              const latestPair = eventPairs[eventPairs.length - 1];
+              // 최근 이벤트 로그 (시퀀스 패턴 분석용) - 시간 순서대로 정렬
+              const sortedLogs = [...logs].sort((a, b) => a.timestamp - b.timestamp);
+              const recentEventsForSequence = sortedLogs.slice(-10);
+              
+              const detection = this.abnormalDetector.detectAbnormal(
+                latestPair,
+                {
+                  lastInputSelection: this.lastInputSelection || undefined,
+                  lastBeforeInputSelection: this.lastBeforeInputSelection || undefined,
+                },
+                recentEventsForSequence
+              );
+              
+              abnormalDetections.push({
+                eventPair: latestPair,
+                detection,
+              });
+              
+              if (detection.isAbnormal) {
+                detectedTrigger = detection.trigger;
+                detectedDetail = detection.detail;
+                scenarioId = detection.scenarioId;
+                scenarioDescription = detection.scenarioDescription;
+              }
+            }
+            
+            // Create snapshot with abnormal detection results
             const snapshot = this.snapshotManager.createSnapshot(
               this.element,
               logs,
               domChangeResult,
-              'auto',
-              `input: ${event.inputType}`
+              detectedTrigger || 'auto',
+              detectedDetail || `input: ${event.inputType}`
             );
+            
+            // Add event pairs and abnormal detections to snapshot
+            snapshot.eventPairs = eventPairs.map(pair => ({
+              beforeInput: pair.beforeInput,
+              input: pair.input,
+              eventKey: pair.eventKey,
+              inputTypeMismatch: pair.inputTypeMismatch,
+              timestampDelta: pair.timestampDelta,
+            }));
+            snapshot.abnormalDetections = abnormalDetections.map(ad => ({
+              eventPair: {
+                beforeInput: ad.eventPair.beforeInput,
+                input: ad.eventPair.input,
+                eventKey: ad.eventPair.eventKey,
+                inputTypeMismatch: ad.eventPair.inputTypeMismatch,
+                timestampDelta: ad.eventPair.timestampDelta,
+              },
+              detection: ad.detection,
+            }));
+            snapshot.scenarioId = scenarioId;
+            snapshot.scenarioDescription = scenarioDescription;
             
             // Generate AI prompt
             try {
@@ -957,3 +1064,9 @@ export type {
   PluginEvents 
 } from './plugins/types';
 
+// Export abnormal detection types
+export type { EventPair } from './core/event-pair';
+export type { ScenarioCondition, AbnormalDetection, PreviousSelection } from './core/abnormal-detector';
+export { ScenarioIdGenerator } from './core/scenario-id';
+export { AbnormalDetector } from './core/abnormal-detector';
+export { extractEventPairs, createEventKey } from './core/event-pair';

@@ -3,6 +3,7 @@ import type { Snapshot } from '../core/snapshot-manager';
 import type { FloatingPanelConfig } from '../types';
 import { removeStyles, getFloatingPanelStyles, injectStyles } from './styles';
 import { extractLastSets, createPhaseBlock } from './event-viewer-utils';
+import { extractEventPairs } from '../core/event-pair';
 
 export type FloatingPanelOptions = FloatingPanelConfig;
 
@@ -499,188 +500,126 @@ export class FloatingPanel {
     phaseContainer.className = 'cev-phases';
     this.eventViewer.appendChild(phaseContainer);
 
-    // Sort events by timestamp
+    // Sort events by timestamp (시간 순서대로 정렬)
     const sortedAll = [...events].sort((a, b) => a.timestamp - b.timestamp);
 
-    // Extract last composition/beforeinput/input set
-    const sets = extractLastSets(sortedAll, 1);
-    let targetLogs: EventLog[] | null = null;
-
-    if (sets.length > 0) {
-      targetLogs = sets[sets.length - 1];
-    }
-
-    // Find last selectionchange
-    let lastSel: EventLog | null = null;
+    // Filter relevant events (composition, beforeinput, input, selectionchange)
+    const relevantEvents: EventLog[] = [];
     for (const log of sortedAll) {
-      if (log.type === 'selectionchange') {
-        lastSel = log;
+      if (
+        log.type === 'compositionstart' ||
+        log.type === 'compositionupdate' ||
+        log.type === 'compositionend' ||
+        log.type === 'beforeinput' ||
+        log.type === 'input' ||
+        log.type === 'selectionchange'
+      ) {
+        relevantEvents.push(log);
       }
     }
 
-    // Find last composition events
-    let lastCompStart: EventLog | null = null;
-    let lastCompUpdate: EventLog | null = null;
-    let lastCompEnd: EventLog | null = null;
-    for (const log of sortedAll) {
-      if (log.type === 'compositionstart') {
-        lastCompStart = log;
-      } else if (log.type === 'compositionupdate') {
-        lastCompUpdate = log;
-      } else if (log.type === 'compositionend') {
-        lastCompEnd = log;
+    if (relevantEvents.length === 0) {
+      const emptyStateEl = document.createElement('div');
+      emptyStateEl.className = 'cev-empty-state';
+      emptyStateEl.textContent = 'No composition/beforeinput/input set';
+      phaseContainer.appendChild(emptyStateEl);
+      return;
+    }
+
+    // Calculate base timestamp (첫 번째 이벤트 기준)
+    const baseTs = relevantEvents[0]?.timestamp ?? null;
+
+    // Get base text from the most recent input event
+    let baseTextForPreview = '';
+    for (let i = relevantEvents.length - 1; i >= 0; i--) {
+      const log = relevantEvents[i];
+      if (log.type === 'input' && log.startContainerText) {
+        baseTextForPreview = log.startContainerText.toString();
+        break;
       }
     }
 
-    // Extract beforeinput and input from target logs
-    let lastBi: EventLog | null = null;
-    let lastIn: EventLog | null = null;
-
-    if (targetLogs) {
-      for (const log of targetLogs) {
-        if (log.type === 'beforeinput') {
-          lastBi = log;
-        } else if (log.type === 'input') {
-          lastIn = log;
-        }
-      }
-    }
-
-    const baseTextForPreview = (lastIn?.startContainerText ?? '').toString();
-
-    // Calculate timestamps and deltas
-    const timestamps: number[] = [];
-    if (lastCompStart?.timestamp != null) timestamps.push(lastCompStart.timestamp);
-    if (lastCompUpdate?.timestamp != null) timestamps.push(lastCompUpdate.timestamp);
-    if (lastCompEnd?.timestamp != null) timestamps.push(lastCompEnd.timestamp);
-    if (lastBi?.timestamp != null) timestamps.push(lastBi.timestamp);
-    if (lastIn?.timestamp != null) timestamps.push(lastIn.timestamp);
-    if (lastSel?.timestamp != null) timestamps.push(lastSel.timestamp);
-    const baseTs = timestamps.length > 0 ? Math.min(...timestamps) : null;
-
-    const compStartDelta = lastCompStart?.timestamp != null && baseTs != null 
-      ? lastCompStart.timestamp - baseTs 
-      : null;
-    const compUpdateDelta = lastCompUpdate?.timestamp != null && baseTs != null 
-      ? lastCompUpdate.timestamp - baseTs 
-      : null;
-    const compEndDelta = lastCompEnd?.timestamp != null && baseTs != null 
-      ? lastCompEnd.timestamp - baseTs 
-      : null;
-    const beforeDelta = lastBi?.timestamp != null && baseTs != null 
-      ? lastBi.timestamp - baseTs 
-      : null;
-    const inputDelta = lastIn?.timestamp != null && baseTs != null 
-      ? lastIn.timestamp - baseTs 
-      : null;
-    const selectionDelta = lastSel?.timestamp != null && baseTs != null 
-      ? lastSel.timestamp - baseTs 
-      : null;
-
-    // Create phase blocks in order: SELECTION → INPUT → BEFOREINPUT → COMPOSITION*
-    if (lastSel) {
-      const selectionBlock = createPhaseBlock('SELECTION', lastSel, baseTextForPreview, {
-        timestampMs: lastSel.timestamp ?? null,
-        deltaMs: selectionDelta,
-        beforeLog: lastBi, // Pass beforeinput log for variant detection
-      });
-      if (selectionBlock) {
-        phaseContainer.appendChild(selectionBlock);
-      }
-    }
+    // Extract event pairs for abnormal detection (snapshot용)
+    const allPairs = extractEventPairs(sortedAll);
+    const latestPair = allPairs.length > 0 ? allPairs[allPairs.length - 1] : null;
+    const lastBi = latestPair?.beforeInput ?? null;
+    const lastIn = latestPair?.input ?? null;
 
     // Determine if we should apply abnormal styling based on recent snapshot
-    let inputExtraClass: string | undefined;
-    let scenarioInfo: string | null = null;
+    const snapshotAbnormalMap = new Map<EventLog, { class: string; info: string }>();
     
     if (this.recentSnapshot && this.recentSnapshot.trigger) {
       const trigger = this.recentSnapshot.trigger;
       const triggerDetail = this.recentSnapshot.triggerDetail || '';
-      
-      // Check if this event set matches the snapshot timestamp (within 100ms window)
       const snapshotTime = this.recentSnapshot.timestamp;
-      const eventTime = lastIn?.timestamp ?? lastBi?.timestamp ?? null;
-      const timeDiff = eventTime && snapshotTime ? Math.abs(eventTime - snapshotTime) : Infinity;
       
-      // If events are within 100ms of snapshot, apply styling
-      if (timeDiff < 100) {
-        inputExtraClass = 'cev-phase-block--abnormal';
-        
-        // Add specific class for range-mapping-fail
-        if (trigger === 'range-mapping-fail' || trigger.includes('range-mapping-fail')) {
-          inputExtraClass = 'cev-phase-block--range-mapping-fail';
-        }
-        
-        // Build scenario info
-        if (trigger) {
-          scenarioInfo = `⚠️ Scenario: ${trigger}`;
-          if (triggerDetail) {
-            scenarioInfo += ` - ${triggerDetail}`;
+      for (const log of relevantEvents) {
+        if (log.type === 'input' || log.type === 'beforeinput') {
+          const eventTime = log.timestamp;
+          const timeDiff = eventTime && snapshotTime ? Math.abs(eventTime - snapshotTime) : Infinity;
+          
+          if (timeDiff < 100) {
+            let abnormalClass = 'cev-phase-block--abnormal';
+            if (trigger === 'range-mapping-fail' || trigger.includes('range-mapping-fail')) {
+              abnormalClass = 'cev-phase-block--range-mapping-fail';
+            }
+            
+            let scenarioInfo = `⚠️ Scenario: ${trigger}`;
+            if (triggerDetail) {
+              scenarioInfo += ` - ${triggerDetail}`;
+            }
+            
+            snapshotAbnormalMap.set(log, { class: abnormalClass, info: scenarioInfo });
           }
         }
       }
     }
 
-    // Check for parent/node mismatch between beforeinput and input (only if no abnormal detection)
-    if (!inputExtraClass && lastBi && lastIn) {
-      const sameParent = (lastBi.parent?.id ?? '') === (lastIn.parent?.id ?? '');
-      const sameNode = (lastBi.node?.nodeName ?? '') === (lastIn.node?.nodeName ?? '');
+    // Render events in chronological order (시간 순서대로 표시)
+    for (const log of relevantEvents) {
+      const deltaMs = log.timestamp != null && baseTs != null 
+        ? log.timestamp - baseTs 
+        : null;
+
+      let extraClassName: string | undefined;
+      let extraLines: string[] | undefined;
+      let beforeLog: EventLog | null = null;
+
+      if (log.type === 'input') {
+        // Check for abnormal styling from snapshot
+        const abnormalInfo = snapshotAbnormalMap.get(log);
+        if (abnormalInfo) {
+          extraClassName = abnormalInfo.class;
+          extraLines = [abnormalInfo.info];
+        } else {
+          // Check for parent/node mismatch with beforeinput
+          if (lastBi && lastIn && log === lastIn) {
+            const sameParent = (lastBi.parent?.id ?? '') === (lastIn.parent?.id ?? '');
+            const sameNode = (lastBi.node?.nodeName ?? '') === (lastIn.node?.nodeName ?? '');
+            
+            if (!sameParent || !sameNode) {
+              extraClassName = 'cev-phase-block--input-different';
+            }
+          }
+        }
+        beforeLog = lastBi;
+      }
+
+      const block = createPhaseBlock(
+        log.type.toUpperCase(),
+        log,
+        baseTextForPreview,
+        {
+          extraClassName,
+          timestampMs: log.timestamp ?? null,
+          deltaMs,
+          extraLines,
+          beforeLog,
+        }
+      );
       
-      if (!sameParent || !sameNode) {
-        inputExtraClass = 'cev-phase-block--input-different';
-      }
-    }
-
-    if (lastIn) {
-      const inputBlock = createPhaseBlock('INPUT', lastIn, baseTextForPreview, {
-        extraClassName: inputExtraClass,
-        timestampMs: lastIn.timestamp ?? null,
-        deltaMs: inputDelta,
-        extraLines: scenarioInfo ? [scenarioInfo] : undefined,
-        beforeLog: lastBi, // Pass beforeinput log for variant detection
-      });
-      if (inputBlock) {
-        phaseContainer.appendChild(inputBlock);
-      }
-    }
-
-    if (lastBi) {
-      const beforeBlock = createPhaseBlock('BEFOREINPUT', lastBi, baseTextForPreview, {
-        timestampMs: lastBi.timestamp ?? null,
-        deltaMs: beforeDelta,
-      });
-      if (beforeBlock) {
-        phaseContainer.appendChild(beforeBlock);
-      }
-    }
-
-    if (lastCompStart) {
-      const compStartBlock = createPhaseBlock('COMPOSITIONSTART', lastCompStart, baseTextForPreview, {
-        timestampMs: lastCompStart.timestamp ?? null,
-        deltaMs: compStartDelta,
-      });
-      if (compStartBlock) {
-        phaseContainer.appendChild(compStartBlock);
-      }
-    }
-
-    if (lastCompUpdate) {
-      const compUpdateBlock = createPhaseBlock('COMPOSITIONUPDATE', lastCompUpdate, baseTextForPreview, {
-        timestampMs: lastCompUpdate.timestamp ?? null,
-        deltaMs: compUpdateDelta,
-      });
-      if (compUpdateBlock) {
-        phaseContainer.appendChild(compUpdateBlock);
-      }
-    }
-
-    if (lastCompEnd) {
-      const compEndBlock = createPhaseBlock('COMPOSITIONEND', lastCompEnd, baseTextForPreview, {
-        timestampMs: lastCompEnd.timestamp ?? null,
-        deltaMs: compEndDelta,
-      });
-      if (compEndBlock) {
-        phaseContainer.appendChild(compEndBlock);
+      if (block) {
+        phaseContainer.appendChild(block);
       }
     }
 

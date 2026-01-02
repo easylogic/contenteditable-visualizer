@@ -155,6 +155,115 @@ function formatRangesForPrompt(ranges?: Snapshot['ranges']): string {
 }
 
 /**
+ * Formats event pairs for prompt
+ */
+function formatEventPairsForPrompt(eventPairs?: Snapshot['eventPairs']): string {
+  if (!eventPairs || eventPairs.length === 0) {
+    return '(No event pairs)';
+  }
+
+  const lines: string[] = [];
+  
+  for (let i = 0; i < eventPairs.length; i++) {
+    const pair = eventPairs[i];
+    lines.push(`Event Pair #${i + 1}:`);
+    
+    if (pair.beforeInput) {
+      const bi = pair.beforeInput;
+      lines.push(`  BeforeInput:`);
+      lines.push(`    timestamp: ${new Date(bi.timestamp).toISOString()}`);
+      lines.push(`    inputType: ${bi.inputType || '(none)'}`);
+      lines.push(`    data: ${bi.data || '(null)'}`);
+      if (bi.parent) {
+        lines.push(`    parent: ${bi.parent.nodeName}@${bi.parent.id}`);
+      }
+      if (bi.node) {
+        lines.push(`    node: ${bi.node.nodeName}@${bi.node.id}`);
+      }
+      if (bi.startOffset !== undefined) {
+        lines.push(`    offset: start=${bi.startOffset}, end=${bi.endOffset || bi.startOffset}`);
+      }
+    } else {
+      lines.push(`  BeforeInput: (missing)`);
+    }
+    
+    if (pair.input) {
+      const input = pair.input;
+      lines.push(`  Input:`);
+      lines.push(`    timestamp: ${new Date(input.timestamp).toISOString()}`);
+      lines.push(`    inputType: ${input.inputType || '(none)'}`);
+      lines.push(`    data: ${input.data || '(null)'}`);
+      if (input.parent) {
+        lines.push(`    parent: ${input.parent.nodeName}@${input.parent.id}`);
+      }
+      if (input.node) {
+        lines.push(`    node: ${input.node.nodeName}@${input.node.id}`);
+      }
+      if (input.startOffset !== undefined) {
+        lines.push(`    offset: start=${input.startOffset}, end=${input.endOffset || input.startOffset}`);
+      }
+    } else {
+      lines.push(`  Input: (missing)`);
+    }
+    
+    lines.push(`  inputTypeMismatch: ${pair.inputTypeMismatch}`);
+    lines.push(`  timestampDelta: ${pair.timestampDelta}ms`);
+    lines.push('');
+  }
+  
+  return lines.join('\n');
+}
+
+/**
+ * Formats abnormal detections for prompt
+ */
+function formatAbnormalDetectionsForPrompt(abnormalDetections?: Snapshot['abnormalDetections']): string {
+  if (!abnormalDetections || abnormalDetections.length === 0) {
+    return '(No abnormal detections)';
+  }
+
+  const lines: string[] = [];
+  
+  for (let i = 0; i < abnormalDetections.length; i++) {
+    const ad = abnormalDetections[i];
+    const detection = ad.detection;
+    
+    lines.push(`Abnormal Detection #${i + 1}:`);
+    lines.push(`  isAbnormal: ${detection.isAbnormal}`);
+    
+    if (detection.isAbnormal) {
+      if (detection.trigger) {
+        lines.push(`  trigger: ${detection.trigger}`);
+      }
+      lines.push(`  detail: ${detection.detail}`);
+      if (detection.scenarioId) {
+        lines.push(`  scenarioId: ${detection.scenarioId}`);
+      }
+      if (detection.scenarioDescription) {
+        lines.push(`  scenarioDescription: ${detection.scenarioDescription}`);
+      }
+      
+      // Event pair summary
+      const pair = ad.eventPair;
+      if (pair.beforeInput || pair.input) {
+        lines.push(`  eventPair:`);
+        if (pair.beforeInput) {
+          lines.push(`    beforeInput: ${pair.beforeInput.inputType || '(none)'} at ${new Date(pair.beforeInput.timestamp).toISOString()}`);
+        }
+        if (pair.input) {
+          lines.push(`    input: ${pair.input.inputType || '(none)'} at ${new Date(pair.input.timestamp).toISOString()}`);
+        }
+        lines.push(`    inputTypeMismatch: ${pair.inputTypeMismatch}`);
+      }
+    }
+    
+    lines.push('');
+  }
+  
+  return lines.join('\n');
+}
+
+/**
  * Generates AI analysis prompt
  */
 export function buildAiPrompt(snapshot: Snapshot): string {
@@ -167,12 +276,26 @@ export function buildAiPrompt(snapshot: Snapshot): string {
     domAfter,
     ranges,
     domChangeResult,
+    eventPairs,
+    abnormalDetections,
+    scenarioId,
+    scenarioDescription,
   } = snapshot;
 
   const triggerDescriptions: Record<string, string> = {
     'manual': 'Manual capture',
     'auto': 'Auto capture (on input event)',
     'missing-beforeinput': 'beforeinput event missing',
+    'input-type-mismatch': 'beforeinput and input have different inputType values',
+    'parent-mismatch': 'beforeinput and input have different parent elements',
+    'node-mismatch': 'beforeinput and input have different node elements',
+    'selection-mismatch': 'Selection changed unexpectedly between beforeinput and input',
+    'boundary-input': 'Input occurred at element boundary',
+    'full-selection': 'Input occurred with full text selection',
+    'range-inconsistency': 'Range inconsistency detected between beforeinput and input',
+    'range-dom-mismatch': 'Range position does not match DOM changes',
+    'unexpected-sequence': 'Unexpected event sequence pattern detected',
+    'abnormal': 'Abnormal input behavior detected',
   };
 
   const lines: string[] = [
@@ -189,8 +312,21 @@ export function buildAiPrompt(snapshot: Snapshot): string {
     `- **Description**: ${triggerDescriptions[trigger || ''] || trigger || 'Unknown'}`,
     `- **Detail**: ${triggerDetail || '(none)'}`,
     `- **Timestamp**: ${new Date(snapshot.timestamp).toISOString()}`,
-    '',
   ];
+
+  // Scenario information
+  if (scenarioId || scenarioDescription) {
+    lines.push('');
+    lines.push('## Scenario Information');
+    if (scenarioId) {
+      lines.push(`- **Scenario ID**: \`${scenarioId}\``);
+    }
+    if (scenarioDescription) {
+      lines.push(`- **Scenario Description**: ${scenarioDescription}`);
+    }
+  }
+
+  lines.push('');
 
   // Event logs
   lines.push('## Event Logs', '');
@@ -203,6 +339,22 @@ export function buildAiPrompt(snapshot: Snapshot): string {
   lines.push('```');
   lines.push(formatRangesForPrompt(ranges));
   lines.push('```', '');
+
+  // Event pairs
+  if (eventPairs && eventPairs.length > 0) {
+    lines.push('## Event Pairs (beforeinput/input pairs)', '');
+    lines.push('```');
+    lines.push(formatEventPairsForPrompt(eventPairs));
+    lines.push('```', '');
+  }
+
+  // Abnormal detections
+  if (abnormalDetections && abnormalDetections.length > 0) {
+    lines.push('## Abnormal Detections', '');
+    lines.push('```');
+    lines.push(formatAbnormalDetectionsForPrompt(abnormalDetections));
+    lines.push('```', '');
+  }
 
   // DOM change results
   if (domChangeResult) {
@@ -239,13 +391,30 @@ export function buildAiPrompt(snapshot: Snapshot): string {
     '- Compare Ranges at each point: Selection, Composition, BeforeInput, Input',
     '- Range position changes (offset, container)',
     '- Consistency between Range and actual DOM changes',
+    '- Check for range-inconsistency: beforeinput and input Range offset mismatches',
+    '- Check for range-dom-mismatch: Range position vs actual DOM change position',
     '',
-    '### 4. Problem Diagnosis',
+    '### 4. Event Pair Analysis',
+    '- Analyze beforeinput/input event pairs',
+    '- Check for inputType mismatches between beforeinput and input',
+    '- Identify missing beforeinput or input events',
+    '- Analyze timestamp deltas between paired events',
+    '- Check Range consistency between beforeinput and input',
+    '',
+    '### 5. Abnormal Detection Analysis',
+    '- Review detected abnormal scenarios (if any)',
+    '- Understand scenario IDs and their meanings',
+    '- Analyze root causes of abnormal behaviors',
+    '- Check for parent/node mismatches, selection jumps, boundary inputs, etc.',
+    '- Analyze range consistency issues (range-inconsistency, range-dom-mismatch)',
+    '- Review event sequence patterns (unexpected-sequence)',
+    '',
+    '### 6. Problem Diagnosis',
     '- Analyze root causes if abnormal behavior exists',
     '- Mismatch points between browser behavior and expected behavior',
     '- Areas in editor implementation that need improvement',
     '',
-    '### 5. Solution Proposal',
+    '### 7. Solution Proposal',
     '- Propose specific solutions',
     '- Code-level improvement suggestions (if possible)',
     '- Consider browser-specific issues',

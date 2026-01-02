@@ -12,6 +12,9 @@ export type SnapshotTrigger =
   | 'text-leak'
   | 'sibling-created'
   | 'missing-beforeinput'
+  | 'input-type-mismatch'
+  | 'abnormal'
+  | 'auto'
   | 'manual'
   | string;
 
@@ -41,6 +44,32 @@ export interface Snapshot {
   anomalies: any[];
   domChangeResult?: any;
   aiPrompt?: string; // AI analysis prompt
+  // 이벤트 쌍 정보 및 비정상 감지 결과
+  eventPairs?: Array<{
+    beforeInput: any | null;
+    input: any | null;
+    eventKey: string;
+    inputTypeMismatch: boolean;
+    timestampDelta: number;
+  }>;
+  abnormalDetections?: Array<{
+    eventPair: {
+      beforeInput: any | null;
+      input: any | null;
+      eventKey: string;
+      inputTypeMismatch: boolean;
+      timestampDelta: number;
+    };
+    detection: {
+      isAbnormal: boolean;
+      trigger?: SnapshotTrigger;
+      detail: string;
+      scenarioId?: string;
+      scenarioDescription?: string;
+    };
+  }>;
+  scenarioId?: string; // 시나리오 ID (간단한 접근용)
+  scenarioDescription?: string; // 시나리오 설명 (간단한 접근용)
 }
 
 function detectEnvironment(): Snapshot['environment'] {
