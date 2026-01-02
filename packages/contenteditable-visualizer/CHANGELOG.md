@@ -1,5 +1,11 @@
 # contenteditable-visualizer
 
+## 0.1.5
+
+### Patch Changes
+
+- bae0f2d: support event fair log
+
 ## 0.1.4
 
 ### Patch Changes
