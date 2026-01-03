@@ -19,6 +19,9 @@ export default defineConfig({
     },
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      external: ['snabbdom', 'snabbdom/build/modules/class', 'snabbdom/build/modules/props', 'snabbdom/build/modules/style', 'snabbdom/build/modules/attributes'],
+    },
   },
   resolve: {
     alias: {

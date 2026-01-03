@@ -11,3 +11,8 @@ dist
 **/dist
 packages/*/package.json.bak
 
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+

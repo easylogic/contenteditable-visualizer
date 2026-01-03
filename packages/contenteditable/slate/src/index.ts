@@ -22,6 +22,11 @@ export interface SlatePluginOptions extends PluginOptions {
     trackSelection?: boolean;
     
     /**
+     * Track document changes
+     */
+    trackDocument?: boolean;
+    
+    /**
      * Track history (undo/redo)
      */
     trackHistory?: boolean;
@@ -38,6 +43,8 @@ export interface SlatePluginOptions extends PluginOptions {
  */
 export interface OperationData {
   timestamp: number;
+  /** 관련 contenteditable 이벤트 ID (선택적) */
+  relatedEventId?: number;
   type: string;
   path?: number[];
   properties?: any;
@@ -65,7 +72,6 @@ export class SlatePlugin extends BasePlugin {
   readonly metadata = SLATE_PLUGIN_METADATA;
   
   private slateEditor: Editor | null = null;
-  private operationHistory: OperationData[] = [];
   private onChangeHandler?: (options?: any) => void;
   private originalOnChange?: (options?: any) => void;
 
@@ -88,9 +94,10 @@ export class SlatePlugin extends BasePlugin {
     this.originalOnChange = this.slateEditor.onChange;
     
     this.onChangeHandler = (options?: any) => {
-      // Capture operations if available
-      if (options?.operations && this.options.config?.trackOperations) {
-        this.captureOperations(options.operations);
+      // Capture operation if available
+      // Slate.js onChange receives { operation?: Operation } - single operation only
+      if (this.options.config?.trackOperations && options?.operation) {
+        this.captureOperations([options.operation]);
       }
       
       // Call original onChange
@@ -112,7 +119,6 @@ export class SlatePlugin extends BasePlugin {
 
   protected onDestroy(): void {
     this.onDetach();
-    this.operationHistory = [];
     this.slateEditor = null;
   }
 
@@ -121,8 +127,7 @@ export class SlatePlugin extends BasePlugin {
    */
   private captureOperations(operations: any[]): void {
     operations.forEach((operation) => {
-      const operationData: OperationData = {
-        timestamp: Date.now(),
+      const operationData: Omit<OperationData, 'timestamp' | 'relatedEventId'> = {
         type: operation.type,
         path: operation.path,
         properties: operation.properties,
@@ -132,14 +137,9 @@ export class SlatePlugin extends BasePlugin {
         text: operation.text,
       };
 
-      this.operationHistory.push(operationData);
+      // Use BasePlugin's addEditorEvent for consistent event storage
+      this.addEditorEvent('operation', operationData);
     });
-    
-    // Keep only last N operations
-    const maxHistory = this.options.config?.maxOperationHistory ?? 100;
-    if (this.operationHistory.length > maxHistory) {
-      this.operationHistory.shift();
-    }
   }
 
   /**
@@ -154,7 +154,7 @@ export class SlatePlugin extends BasePlugin {
       return {
         children: config.trackDocument ? this.slateEditor.children : undefined,
         selection: config.trackSelection ? this.slateEditor.selection : undefined,
-        operationCount: this.operationHistory.length,
+        operationCount: this.editorEvents.length,
       };
     } catch (error) {
       return null;
@@ -163,9 +163,62 @@ export class SlatePlugin extends BasePlugin {
 
   /**
    * Get operation history
+   * Returns events in OperationData format with timestamp and relatedEventId
    */
   getEvents(): OperationData[] {
-    return this.operationHistory.slice();
+    return this.editorEvents.map(event => ({
+      timestamp: event.timestamp,
+      relatedEventId: event.relatedEventId,
+      ...event.data as Omit<OperationData, 'timestamp' | 'relatedEventId'>,
+    }));
   }
+
+  /**
+   * Get document structure as serializable data
+   * Returns Slate document structure as JSON for StructureRenderer
+   */
+  getStructureData(): any {
+    if (!this.slateEditor) return null;
+
+    const config = this.options.config || {};
+    if (!config.trackDocument) return null;
+
+    try {
+      return this.childrenToStructureNodes(this.slateEditor.children);
+    } catch (error) {
+      console.warn('SlatePlugin: Failed to get structure data', error);
+      return null;
+    }
+  }
+
+  /**
+   * Convert Slate children to structure nodes
+   */
+  private childrenToStructureNodes(children: any[]): any[] {
+    return children.map(node => {
+      const nodeType = node.type || 'unknown';
+      const structureNode: any = {
+        type: nodeType,
+      };
+
+      // Add properties if present
+      if (node.properties && Object.keys(node.properties).length > 0) {
+        structureNode.attrs = node.properties;
+      }
+
+      // Add text content if it's a text node
+      if (node.text !== undefined) {
+        structureNode.text = String(node.text);
+      }
+
+      // Recursively add children
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        structureNode.children = this.childrenToStructureNodes(node.children);
+      }
+
+      return structureNode;
+    });
+  }
+
 }
 

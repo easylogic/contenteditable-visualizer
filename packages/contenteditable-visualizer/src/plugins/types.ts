@@ -98,6 +98,21 @@ export interface VisualizerPlugin {
   getEvents?(): any[];
   
   /**
+   * Get document structure as serializable data
+   * 플러그인이 문서 구조를 JSON 형태로 반환
+   * StructureRenderer가 이를 VNode로 변환하여 렌더링
+   * @returns StructureNode or array of StructureNode, or null if not available
+   */
+  getStructureData?(): any;
+  
+  /**
+   * contenteditable 이벤트 발생 시 호출됨
+   * 플러그인이 이 이벤트와 자신의 이벤트를 연결할 수 있음
+   * @param eventLog - contenteditable 이벤트 로그
+   */
+  onContentEditableEvent?(eventLog: { id: number; timestamp: number; type: string }): void;
+  
+  /**
    * Clean up resources
    */
   destroy(): void;

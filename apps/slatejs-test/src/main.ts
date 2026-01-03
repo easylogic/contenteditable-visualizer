@@ -192,11 +192,13 @@ const visualizer = createVisualizer(editorElement, {
   snapshots: true,
   panel: true,
   autoSnapshot: false,
+  container: document.body,
 });
 
 // Note: Slate.js plugin requires a Slate Editor instance
-// For this simple test without React, we'll skip plugin registration
-// The plugin is demonstrated in the React version above
+// Since we're using a simple contenteditable without React, we can't use the full Slate plugin
+// But we can still test the visualizer functionality
+// For full Slate.js integration, use the React version above or create a Slate editor instance
 
 document.getElementById('capture-snapshot')?.addEventListener('click', async () => {
   try {

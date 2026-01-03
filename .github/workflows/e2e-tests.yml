@@ -1,0 +1,103 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [prosemirror-test, lexical-test, contenteditable-test]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Build packages
+        run: pnpm build --filter "@contenteditable/*" --filter "contenteditable-visualizer"
+      
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      
+      - name: Run E2E tests
+        run: |
+          # Determine port and test command based on app
+          if [ "${{ matrix.app }}" == "prosemirror-test" ]; then
+            PORT=5173
+            TEST_CMD="pnpm exec playwright test tests/e2e/prosemirror.spec.ts"
+          elif [ "${{ matrix.app }}" == "lexical-test" ]; then
+            PORT=5174
+            TEST_CMD="pnpm exec playwright test tests/e2e/lexical.spec.ts"
+          else
+            PORT=5175
+            TEST_CMD="pnpm exec playwright test tests/e2e/contenteditable.spec.ts"
+          fi
+          
+          # Start the test app server in background
+          echo "Starting ${{ matrix.app }} on port $PORT..."
+          PORT=$PORT pnpm --filter ${{ matrix.app }} dev > /tmp/server-${{ matrix.app }}.log 2>&1 &
+          SERVER_PID=$!
+          
+          # Wait for server to be ready
+          echo "Waiting for server on port $PORT..."
+          for i in {1..30}; do
+            if curl -f http://localhost:$PORT > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Server failed to start. Logs:"
+              cat /tmp/server-${{ matrix.app }}.log
+              exit 1
+            fi
+            sleep 2
+          done
+          
+          # Run tests
+          echo "Running tests for ${{ matrix.app }}..."
+          $TEST_CMD || TEST_EXIT_CODE=$?
+          
+          # Kill the server
+          echo "Stopping server..."
+          kill $SERVER_PID 2>/dev/null || true
+          wait $SERVER_PID 2>/dev/null || true
+          
+          exit ${TEST_EXIT_CODE:-0}
+        env:
+          CI: true
+          PORT: ${{ matrix.app == 'prosemirror-test' && '5173' || matrix.app == 'lexical-test' && '5174' || '5175' }}
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.app }}
+          path: playwright-report/
+          retention-days: 30
+      
+      - name: Upload test results (HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.app }}
+          path: test-results/
+          retention-days: 30

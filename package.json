@@ -11,12 +11,19 @@
     "test:slatejs": "pnpm --filter slatejs-test dev",
     "test:editorjs": "pnpm --filter editorjs-test dev",
     "test:lexical": "pnpm --filter lexical-test dev",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:prosemirror": "playwright test tests/e2e/prosemirror.spec.ts",
+    "test:e2e:lexical": "playwright test tests/e2e/lexical.spec.ts",
+    "test:e2e:contenteditable": "playwright test tests/e2e/contenteditable.spec.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm --filter contenteditable-visualizer build && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
+    "@playwright/test": "^1.48.0",
     "typescript": "^5.6.3"
   }
 }

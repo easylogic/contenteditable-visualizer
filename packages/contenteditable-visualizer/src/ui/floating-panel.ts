@@ -2,8 +2,9 @@ import type { EventLog } from '../core/event-logger';
 import type { Snapshot } from '../core/snapshot-manager';
 import type { FloatingPanelConfig } from '../types';
 import { removeStyles, getFloatingPanelStyles, injectStyles } from './styles';
-import { extractLastSets, createPhaseBlock } from './event-viewer-utils';
+import { createPhaseBlock } from './event-viewer-utils';
 import { extractEventPairs } from '../core/event-pair';
+import { StructureRenderer } from './structure-renderer';
 
 export type FloatingPanelOptions = FloatingPanelConfig;
 
@@ -25,15 +26,21 @@ export class FloatingPanel {
   private badge: HTMLElement | null = null;
   private resizeHandle: HTMLElement | null = null;
   private isOpen = false;
-  private currentView: 'events' | 'snapshots' = 'events';
+  private currentView: 'events' | 'snapshots' | 'structure' = 'events';
   private options: FloatingPanelOptions;
   private parentContainer: HTMLElement;
 
   private eventViewer: HTMLElement | null = null;
   private snapshotViewer: HTMLElement | null = null;
+  private structureViewer: HTMLElement | null = null;
   
   private snapshotCount: number = 0;
   private recentSnapshot: Snapshot | null = null; // Track recent snapshot for event viewer styling
+  
+  private plugins: Map<string, any> = new Map(); // Store plugins that provide structure views
+  private structureRenderer: StructureRenderer | null = null; // Structure renderer using Virtual DOM
+  private structureUpdateInterval: number | null = null; // Interval ID for structure updates
+  private readonly STRUCTURE_UPDATE_INTERVAL = 500; // Update structure view every 500ms when active
   
   private isResizing = false;
   private resizeStartX = 0;
@@ -45,8 +52,9 @@ export class FloatingPanel {
    * Creates a new FloatingPanel instance
    * 
    * @param options - Panel configuration options
+   * @param plugins - Map of registered plugins (optional, for structure view)
    */
-  constructor(options: FloatingPanelOptions = {}) {
+  constructor(options: FloatingPanelOptions = {}, plugins?: Map<string, any>) {
     this.options = {
       position: options.position || 'bottom-right',
       theme: options.theme || 'auto',
@@ -62,6 +70,11 @@ export class FloatingPanel {
     };
 
     this.parentContainer = this.options.container || document.body;
+
+    // Store plugins if provided
+    if (plugins) {
+      this.plugins = plugins;
+    }
 
     this.container = this.createContainer();
     this.toggleButton = this.createToggleButton();
@@ -294,6 +307,12 @@ export class FloatingPanel {
     tabs.appendChild(eventsTab);
     tabs.appendChild(snapshotsTab);
 
+    // Add Structure tab if any plugin provides structure view
+    const structureTab = this.createStructureTab();
+    if (structureTab) {
+      tabs.appendChild(structureTab);
+    }
+
     const closeButton = document.createElement('button');
     closeButton.className = 'cev-close-button';
     closeButton.innerHTML = '×';
@@ -313,9 +332,13 @@ export class FloatingPanel {
 
     this.eventViewer = this.createEventViewer();
     this.snapshotViewer = this.createSnapshotViewer();
+    this.structureViewer = this.createStructureViewer();
 
     content.appendChild(this.eventViewer);
     content.appendChild(this.snapshotViewer);
+    if (this.structureViewer) {
+      content.appendChild(this.structureViewer);
+    }
 
     return content;
   }
@@ -345,6 +368,136 @@ export class FloatingPanel {
     viewer.appendChild(emptyState);
 
     return viewer;
+  }
+
+  /**
+   * Create Structure tab if any plugin provides structure data
+   */
+  private createStructureTab(): HTMLElement | null {
+    // Check if any plugin provides structure data
+    const hasStructureData = Array.from(this.plugins.values()).some(
+      plugin => plugin.getStructureData && typeof plugin.getStructureData === 'function'
+    );
+
+    if (!hasStructureData) {
+      return null;
+    }
+
+    const tab = document.createElement('button');
+    tab.className = 'cev-tab';
+    tab.textContent = 'Structure';
+    tab.addEventListener('click', () => this.switchView('structure'));
+
+    return tab;
+  }
+
+  /**
+   * Create Structure viewer container
+   */
+  private createStructureViewer(): HTMLElement | null {
+    // Check if any plugin provides structure data
+    const hasStructureData = Array.from(this.plugins.values()).some(
+      plugin => plugin.getStructureData && typeof plugin.getStructureData === 'function'
+    );
+
+    if (!hasStructureData) {
+      return null;
+    }
+
+    const viewer = document.createElement('div');
+    viewer.className = 'cev-structure-viewer';
+    viewer.setAttribute('data-view', 'structure');
+    viewer.style.display = 'none';
+
+    // Initialize StructureRenderer
+    this.structureRenderer = new StructureRenderer(viewer);
+    
+    // Initial update
+    this.updateStructureView();
+
+    return viewer;
+  }
+
+  /**
+   * Public method to refresh structure view (called when plugins are registered)
+   */
+  refreshStructureView(): void {
+    if (this.currentView === 'structure') {
+      this.updateStructureView();
+    }
+  }
+
+  /**
+   * Update structure view with current plugin states
+   * Uses StructureRenderer with Virtual DOM for efficient updates
+   */
+  private updateStructureView(): void {
+    if (!this.structureRenderer || !this.structureViewer) return;
+
+    // Collect structure data from all plugins
+    const structureDataList: Array<{ pluginId: string; pluginName: string; data: any }> = [];
+
+    for (const [pluginId, plugin] of this.plugins.entries()) {
+      if (plugin.getStructureData && typeof plugin.getStructureData === 'function') {
+        try {
+          const data = plugin.getStructureData();
+          if (data !== null && data !== undefined) {
+            structureDataList.push({
+              pluginId,
+              pluginName: plugin.metadata?.name || pluginId,
+              data,
+            });
+          }
+        } catch (error) {
+          console.warn(`Failed to get structure data from plugin ${pluginId}:`, error);
+        }
+      }
+    }
+
+    if (structureDataList.length === 0) {
+      this.structureRenderer.update(null);
+      return;
+    }
+
+    // If multiple plugins, combine with headers
+    // For now, show first plugin's data (can be enhanced later to show multiple)
+    if (structureDataList.length === 1) {
+      this.structureRenderer.update(structureDataList[0].data);
+    } else {
+      // Multiple plugins - combine into array or show first one
+      // TODO: Enhance to show multiple plugin structures with headers
+      this.structureRenderer.update(structureDataList[0].data);
+    }
+  }
+
+  /**
+   * Start periodic structure view updates when structure tab is active
+   */
+  private startStructureUpdates(): void {
+    this.stopStructureUpdates(); // Clear any existing interval
+    
+    // Update immediately
+    this.updateStructureView();
+    
+    // Then update periodically
+    this.structureUpdateInterval = window.setInterval(() => {
+      if (this.currentView === 'structure' && this.isOpen) {
+        this.updateStructureView();
+      } else {
+        // Stop if tab is no longer active
+        this.stopStructureUpdates();
+      }
+    }, this.STRUCTURE_UPDATE_INTERVAL);
+  }
+
+  /**
+   * Stop periodic structure view updates
+   */
+  private stopStructureUpdates(): void {
+    if (this.structureUpdateInterval !== null) {
+      clearInterval(this.structureUpdateInterval);
+      this.structureUpdateInterval = null;
+    }
   }
 
   private applyStyles(): void {
@@ -461,7 +614,7 @@ export class FloatingPanel {
     this.panel.style.display = 'none';
   }
 
-  switchView(view: 'events' | 'snapshots'): void {
+  switchView(view: 'events' | 'snapshots' | 'structure'): void {
     this.currentView = view;
     this.updateView();
   }
@@ -470,14 +623,30 @@ export class FloatingPanel {
     const tabs = this.panel.querySelectorAll('.cev-tab');
     tabs.forEach(tab => tab.classList.remove('active'));
 
+    // Hide all viewers
+    if (this.eventViewer) this.eventViewer.style.display = 'none';
+    if (this.snapshotViewer) this.snapshotViewer.style.display = 'none';
+    if (this.structureViewer) this.structureViewer.style.display = 'none';
+
     if (this.currentView === 'events') {
       tabs[0]?.classList.add('active');
       if (this.eventViewer) this.eventViewer.style.display = 'block';
-      if (this.snapshotViewer) this.snapshotViewer.style.display = 'none';
-    } else {
+    } else if (this.currentView === 'snapshots') {
       tabs[1]?.classList.add('active');
-      if (this.eventViewer) this.eventViewer.style.display = 'none';
       if (this.snapshotViewer) this.snapshotViewer.style.display = 'block';
+    } else if (this.currentView === 'structure') {
+      // Find structure tab (it's the third tab if it exists)
+      const structureTabIndex = Array.from(tabs).findIndex(
+        tab => tab.textContent?.trim() === 'Structure'
+      );
+      if (structureTabIndex >= 0) {
+        tabs[structureTabIndex]?.classList.add('active');
+      }
+      if (this.structureViewer) {
+        this.structureViewer.style.display = 'block';
+        // Update structure view when switching to structure tab
+        this.updateStructureView();
+      }
     }
   }
 

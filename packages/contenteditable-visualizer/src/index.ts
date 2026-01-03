@@ -318,7 +318,9 @@ export class ContentEditableVisualizer {
         const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
         if (this.options.logEvents) {
-          this.eventLogger.logEvent('beforeinput', event, range);
+          const eventLog = this.eventLogger.logEvent('beforeinput', event, range);
+          // 플러그인에 contenteditable 이벤트 알림
+          this.notifyPluginsOfContentEditableEvent(eventLog);
         }
 
         if (this.options.visualize && this.rangeVisualizer && range) {
@@ -378,7 +380,9 @@ export class ContentEditableVisualizer {
         const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
         if (this.options.logEvents) {
-          this.eventLogger.logEvent('input', event, range);
+          const eventLog = this.eventLogger.logEvent('input', event, range);
+          // 플러그인에 contenteditable 이벤트 알림
+          this.notifyPluginsOfContentEditableEvent(eventLog);
         }
 
         // Detect DOM changes
@@ -577,7 +581,8 @@ export class ContentEditableVisualizer {
         const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
         if (this.options.logEvents) {
-          this.eventLogger.logEvent('compositionupdate', event, range);
+          const eventLog = this.eventLogger.logEvent('compositionupdate', event, range);
+          this.notifyPluginsOfContentEditableEvent(eventLog);
         }
 
         if (this.options.visualize && this.rangeVisualizer && range) {
@@ -600,7 +605,8 @@ export class ContentEditableVisualizer {
         const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
         if (this.options.logEvents) {
-          this.eventLogger.logEvent('compositionend', event, range);
+          const eventLog = this.eventLogger.logEvent('compositionend', event, range);
+          this.notifyPluginsOfContentEditableEvent(eventLog);
         }
       } catch (error) {
         this.handleError(error instanceof Error ? error : new Error(String(error)), 'compositionend');
@@ -689,6 +695,25 @@ export class ContentEditableVisualizer {
 
     // Update snapshots every 2 seconds
     setInterval(updateSnapshots, 2000);
+  }
+
+  /**
+   * 플러그인에 contenteditable 이벤트 알림
+   */
+  private notifyPluginsOfContentEditableEvent(eventLog: EventLog): void {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.onContentEditableEvent && eventLog.id != null && eventLog.timestamp != null) {
+        try {
+          plugin.onContentEditableEvent({
+            id: eventLog.id,
+            timestamp: eventLog.timestamp,
+            type: eventLog.type,
+          });
+        } catch (error) {
+          this.handleError(error instanceof Error ? error : new Error(String(error)), 'notifyPluginsOfContentEditableEvent');
+        }
+      }
+    }
   }
 
   private updateFloatingPanel(): void {
@@ -886,6 +911,12 @@ export class ContentEditableVisualizer {
       if (this.isAttached) {
         plugin.attach();
       }
+
+      // Update floating panel structure view if it exists
+      if (this.floatingPanel) {
+        // Update structure view using public method
+        (this.floatingPanel as any).refreshStructureView?.();
+      }
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error(String(error)), 'registerPlugin');
     }
@@ -1057,6 +1088,7 @@ export type { FloatingPanelPosition, FloatingPanelTheme } from './types';
 
 // Export plugins
 export { BasePlugin } from './plugins/base';
+export type { PluginEvent } from './plugins/base';
 export type { 
   VisualizerPlugin, 
   PluginMetadata, 

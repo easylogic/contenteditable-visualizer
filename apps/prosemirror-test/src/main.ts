@@ -138,8 +138,27 @@ showPluginStateBtn.addEventListener('click', () => {
   if (events.length > 0) {
     console.log('Last transaction:', events[events.length - 1]);
   }
+  
+  // Show in alert for quick check
+  alert(`ProseMirror Plugin Status:\n- Total Events: ${events.length}\n- Plugin Attached: ${prosemirrorPlugin ? 'Yes' : 'No'}\n- View Available: ${view ? 'Yes' : 'No'}`);
 });
 document.body.appendChild(showPluginStateBtn);
+
+// Add plugin status indicator
+const statusIndicator = document.createElement('div');
+statusIndicator.style.cssText = `
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: #10b981;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 10000;
+`;
+statusIndicator.textContent = '✓ ProseMirror Plugin Active';
+document.body.appendChild(statusIndicator);
 
 console.log('ProseMirror Visualizer initialized with plugin');
 

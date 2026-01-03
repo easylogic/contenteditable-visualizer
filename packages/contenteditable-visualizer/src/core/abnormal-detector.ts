@@ -258,4 +258,50 @@ export class AbnormalDetector {
     // 시작 경계 (offset === 0) 또는 끝 경계 (offset === textLength)
     return offset === 0 || offset === textLength;
   }
+
+  /**
+   * 예상치 못한 이벤트 시퀀스를 감지합니다.
+   * 
+   * @param recentEvents - 최근 이벤트 로그들
+   * @returns 예상치 못한 시퀀스 여부
+   */
+  private detectUnexpectedSequence(recentEvents: EventLog[]): boolean {
+    if (recentEvents.length === 0) return false;
+
+    // 최근 이벤트들의 타입만 추출
+    const eventTypes = recentEvents.map(e => e.type);
+
+    // 정상 패턴과 매칭되는지 확인
+    for (const pattern of NORMAL_SEQUENCE_PATTERNS) {
+      if (this.matchesPattern(eventTypes, pattern.events)) {
+        return false; // 정상 패턴과 매칭됨
+      }
+    }
+
+    // 어떤 정상 패턴과도 매칭되지 않으면 예상치 못한 시퀀스
+    return true;
+  }
+
+  /**
+   * 이벤트 타입 배열이 패턴과 매칭되는지 확인합니다.
+   * 부분 매칭을 허용합니다 (패턴이 이벤트 시퀀스의 일부일 수 있음).
+   */
+  private matchesPattern(eventTypes: string[], pattern: string[]): boolean {
+    if (pattern.length === 0) return false;
+    if (eventTypes.length < pattern.length) return false;
+
+    // 패턴이 이벤트 시퀀스의 연속된 부분과 매칭되는지 확인
+    for (let i = 0; i <= eventTypes.length - pattern.length; i++) {
+      let matches = true;
+      for (let j = 0; j < pattern.length; j++) {
+        if (eventTypes[i + j] !== pattern[j]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return true;
+    }
+
+    return false;
+  }
 }
