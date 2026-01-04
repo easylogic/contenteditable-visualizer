@@ -1,5 +1,12 @@
 # @contenteditable/lexical
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [1643b09]
+  - contenteditable-visualizer@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes
