@@ -22,24 +22,27 @@ test.describe('Lexical Test App', () => {
     await editor.type('Test input for Lexical');
 
     const captureBtn = page.locator('#capture-snapshot');
-    await captureBtn.click();
-
-    page.on('dialog', async dialog => {
+    
+    page.once('dialog', async dialog => {
       expect(dialog.message()).toContain('Snapshot captured');
       await dialog.accept();
     });
+    
+    await captureBtn.click();
+    await page.waitForTimeout(500);
   });
 
   test('should show plugin state', async ({ page }) => {
     const showStateBtn = page.locator('button:has-text("Show Lexical State")');
     await expect(showStateBtn).toBeVisible();
     
-    await showStateBtn.click();
-    
-    page.on('dialog', async dialog => {
+    page.once('dialog', async dialog => {
       expect(dialog.message()).toContain('Lexical Plugin Status');
       await dialog.accept();
     });
+    
+    await showStateBtn.click();
+    await page.waitForTimeout(500);
   });
 
   test('should export data', async ({ page }) => {

@@ -43,19 +43,12 @@ export async function switchToTab(page: Page, tabName: 'events' | 'snapshots' | 
 
 /**
  * Capture a snapshot and wait for confirmation
+ * Note: Dialog handling should be done by the caller using page.on('dialog', ...)
  */
 export async function captureSnapshot(page: Page): Promise<void> {
   const captureBtn = page.locator('#capture-snapshot');
   await captureBtn.click();
   
-  // Wait for alert
-  await new Promise<void>((resolve) => {
-    page.on('dialog', async dialog => {
-      await dialog.accept();
-      resolve();
-    });
-    
-    // Timeout after 5 seconds
-    setTimeout(() => resolve(), 5000);
-  });
+  // Wait a bit for the dialog to appear
+  await page.waitForTimeout(500);
 }

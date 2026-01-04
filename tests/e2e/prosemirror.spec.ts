@@ -26,12 +26,15 @@ test.describe('ProseMirror Test App', () => {
 
     // Capture snapshot
     let dialogMessage = '';
-    page.on('dialog', async dialog => {
+    page.once('dialog', async dialog => {
       dialogMessage = dialog.message();
       await dialog.accept();
     });
     
     await captureSnapshot(page);
+    
+    // Wait a bit for dialog to be handled
+    await page.waitForTimeout(500);
     expect(dialogMessage).toContain('Snapshot captured');
   });
 
@@ -61,7 +64,7 @@ test.describe('ProseMirror Test App', () => {
     await expect(showStateBtn).toBeVisible();
     
     let dialogMessage = '';
-    page.on('dialog', async dialog => {
+    page.once('dialog', async dialog => {
       dialogMessage = dialog.message();
       await dialog.accept();
     });

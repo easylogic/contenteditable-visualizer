@@ -17,12 +17,14 @@ test.describe('ContentEditable Test App', () => {
     await editor.type('Test input');
 
     const captureBtn = page.locator('#capture-snapshot');
-    await captureBtn.click();
-
-    page.on('dialog', async dialog => {
+    
+    page.once('dialog', async dialog => {
       expect(dialog.message()).toContain('Snapshot captured');
       await dialog.accept();
     });
+    
+    await captureBtn.click();
+    await page.waitForTimeout(500);
   });
 
   test('should toggle visualization', async ({ page }) => {
@@ -37,11 +39,12 @@ test.describe('ContentEditable Test App', () => {
     const clearSnapshotsBtn = page.locator('#clear-snapshots');
     await expect(clearSnapshotsBtn).toBeVisible();
     
-    await clearSnapshotsBtn.click();
-    
-    page.on('dialog', async dialog => {
+    page.once('dialog', async dialog => {
       expect(dialog.message()).toContain('Snapshots cleared');
       await dialog.accept();
     });
+    
+    await clearSnapshotsBtn.click();
+    await page.waitForTimeout(500);
   });
 });
