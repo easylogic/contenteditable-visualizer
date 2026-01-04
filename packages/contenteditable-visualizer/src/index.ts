@@ -718,7 +718,10 @@ export class ContentEditableVisualizer {
 
   private updateFloatingPanel(): void {
     if (!this.floatingPanel) return;
-    this.floatingPanel.updateEvents(this.eventLogger.getLogs());
+    this.floatingPanel.updateEvents(this.eventLogger.getLogs(), {
+      lastInputSelection: this.lastInputSelection || undefined,
+      lastBeforeInputSelection: this.lastBeforeInputSelection || undefined,
+    });
     this.snapshotManager.getAllSnapshots().then(snapshots => {
       this.floatingPanel?.updateSnapshots(snapshots);
     });

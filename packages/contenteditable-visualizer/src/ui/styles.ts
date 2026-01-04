@@ -233,6 +233,157 @@ export const floatingPanelStyles = {
       color: #6b7280;
     }
 
+    /* Event Pair History Viewer */
+    .cev-event-pair-history-container {
+      max-height: 100%;
+      overflow-y: auto;
+      padding: 8px 12px;
+    }
+
+    .cev-event-pair-history-block {
+      margin-bottom: 16px;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+    }
+
+    .cev-event-pair-history-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background-color: #1f2937;
+      border-bottom: 1px solid #374151;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .cev-event-pair-number {
+      color: #60a5fa;
+      font-weight: 700;
+    }
+
+    .cev-event-pair-badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .cev-event-pair-badge--abnormal {
+      background-color: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid #ef4444;
+    }
+
+    .cev-event-pair-badge--mismatch {
+      background-color: rgba(245, 158, 11, 0.2);
+      color: #fcd34d;
+      border: 1px solid #f59e0b;
+    }
+
+    .cev-event-pair-timestamp {
+      margin-left: auto;
+      color: #9ca3af;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .cev-event-pair-history-phase {
+      margin: 8px;
+    }
+
+    .cev-phase-block--missing {
+      border-color: #6b7280;
+      background-color: rgba(107, 114, 128, 0.1);
+    }
+
+    .cev-phase-block--missing .cev-phase-header {
+      background-color: rgba(107, 114, 128, 0.2);
+      color: #9ca3af;
+    }
+
+    .cev-phase-status {
+      color: #f59e0b;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    /* Editor Events Section */
+    .cev-editor-events-section {
+      margin: 8px;
+      padding: 8px;
+      background-color: rgba(59, 130, 246, 0.05);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 4px;
+    }
+
+    .cev-editor-events-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: #60a5fa;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .cev-editor-events-plugin {
+      margin-bottom: 8px;
+    }
+
+    .cev-editor-events-plugin:last-child {
+      margin-bottom: 0;
+    }
+
+    .cev-editor-events-plugin-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: #93c5fd;
+      margin-bottom: 4px;
+      padding-left: 4px;
+    }
+
+    .cev-editor-events-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-left: 12px;
+    }
+
+    .cev-editor-event-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      background-color: rgba(59, 130, 246, 0.1);
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    }
+
+    .cev-editor-event-type {
+      color: #93c5fd;
+      font-weight: 600;
+      min-width: 100px;
+    }
+
+    .cev-editor-event-time {
+      color: #9ca3af;
+      font-size: 10px;
+      min-width: 60px;
+    }
+
+    .cev-editor-event-preview {
+      flex: 1;
+      color: #d1d5db;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 10px;
+    }
+
     /* DevTools-style phase blocks */
     .cev-phases {
       display: flex;

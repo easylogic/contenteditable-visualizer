@@ -2,9 +2,11 @@ import type { EventLog } from '../core/event-logger';
 import type { Snapshot } from '../core/snapshot-manager';
 import type { FloatingPanelConfig } from '../types';
 import { removeStyles, getFloatingPanelStyles, injectStyles } from './styles';
-import { createPhaseBlock } from './event-viewer-utils';
 import { extractEventPairs } from '../core/event-pair';
 import { StructureRenderer } from './structure-renderer';
+import { EventPairHistoryViewer } from './event-pair-history-viewer';
+import { AbnormalDetector, type AbnormalDetection } from '../core/abnormal-detector';
+import type { VisualizerPlugin } from '../plugins/types';
 
 export type FloatingPanelOptions = FloatingPanelConfig;
 
@@ -41,6 +43,8 @@ export class FloatingPanel {
   private structureRenderer: StructureRenderer | null = null; // Structure renderer using Virtual DOM
   private structureUpdateInterval: number | null = null; // Interval ID for structure updates
   private readonly STRUCTURE_UPDATE_INTERVAL = 500; // Update structure view every 500ms when active
+  private eventPairHistoryViewer: EventPairHistoryViewer | null = null; // Event pair history viewer
+  private abnormalDetector: AbnormalDetector; // Abnormal detector for event pairs
   
   private isResizing = false;
   private resizeStartX = 0;
@@ -75,6 +79,9 @@ export class FloatingPanel {
     if (plugins) {
       this.plugins = plugins;
     }
+
+    // Initialize abnormal detector
+    this.abnormalDetector = new AbnormalDetector();
 
     this.container = this.createContainer();
     this.toggleButton = this.createToggleButton();
@@ -347,6 +354,22 @@ export class FloatingPanel {
     const viewer = document.createElement('div');
     viewer.className = 'cev-event-viewer';
     viewer.setAttribute('data-view', 'events');
+
+    // Create scrollable container for event pair history
+    const historyContainer = document.createElement('div');
+    historyContainer.className = 'cev-event-pair-history-container';
+    viewer.appendChild(historyContainer);
+
+    // Initialize event pair history viewer
+    this.eventPairHistoryViewer = new EventPairHistoryViewer(
+      historyContainer,
+      this.plugins as Map<string, VisualizerPlugin>,
+      {
+        maxPairs: 10,
+        showEditorEvents: true,
+        timeWindow: 100,
+      }
+    );
 
     const emptyState = document.createElement('div');
     emptyState.className = 'cev-empty-state';
@@ -650,155 +673,57 @@ export class FloatingPanel {
     }
   }
 
-  updateEvents(events: EventLog[]): void {
-    if (!this.eventViewer) return;
-
-    // Clear existing content
-    this.eventViewer.innerHTML = '';
+  updateEvents(
+    events: EventLog[],
+    previousState?: {
+      lastInputSelection?: import('../core/abnormal-detector').PreviousSelection;
+      lastBeforeInputSelection?: import('../core/abnormal-detector').PreviousSelection;
+    }
+  ): void {
+    if (!this.eventViewer || !this.eventPairHistoryViewer) return;
 
     if (events.length === 0) {
-      const emptyStateEl = document.createElement('div');
-      emptyStateEl.className = 'cev-empty-state';
-      emptyStateEl.textContent = 'No events logged yet. Interact with the editor to see events.';
-      this.eventViewer.appendChild(emptyStateEl);
+      const emptyStateEl = this.eventViewer.querySelector('.cev-empty-state');
+      if (emptyStateEl && emptyStateEl instanceof HTMLElement) {
+        emptyStateEl.textContent = 'No events logged yet. Interact with the editor to see events.';
+        emptyStateEl.style.display = 'block';
+      }
+      const historyContainer = this.eventViewer.querySelector('.cev-event-pair-history-container');
+      if (historyContainer) {
+        (historyContainer as HTMLElement).style.display = 'none';
+      }
       return;
     }
 
-    // Create phase container (DevTools style)
-    const phaseContainer = document.createElement('div');
-    phaseContainer.className = 'cev-phases';
-    this.eventViewer.appendChild(phaseContainer);
+    // Hide empty state
+    const emptyStateEl = this.eventViewer.querySelector('.cev-empty-state');
+    if (emptyStateEl && emptyStateEl instanceof HTMLElement) {
+      emptyStateEl.style.display = 'none';
+    }
 
-    // Sort events by timestamp (시간 순서대로 정렬)
+    // Show history container
+    const historyContainer = this.eventViewer.querySelector('.cev-event-pair-history-container');
+    if (historyContainer && historyContainer instanceof HTMLElement) {
+      historyContainer.style.display = 'block';
+    }
+
+    // Sort events by timestamp
     const sortedAll = [...events].sort((a, b) => a.timestamp - b.timestamp);
 
-    // Filter relevant events (composition, beforeinput, input, selectionchange)
-    const relevantEvents: EventLog[] = [];
-    for (const log of sortedAll) {
-      if (
-        log.type === 'compositionstart' ||
-        log.type === 'compositionupdate' ||
-        log.type === 'compositionend' ||
-        log.type === 'beforeinput' ||
-        log.type === 'input' ||
-        log.type === 'selectionchange'
-      ) {
-        relevantEvents.push(log);
-      }
-    }
-
-    if (relevantEvents.length === 0) {
-      const emptyStateEl = document.createElement('div');
-      emptyStateEl.className = 'cev-empty-state';
-      emptyStateEl.textContent = 'No composition/beforeinput/input set';
-      phaseContainer.appendChild(emptyStateEl);
-      return;
-    }
-
-    // Calculate base timestamp (첫 번째 이벤트 기준)
-    const baseTs = relevantEvents[0]?.timestamp ?? null;
-
-    // Get base text from the most recent input event
-    let baseTextForPreview = '';
-    for (let i = relevantEvents.length - 1; i >= 0; i--) {
-      const log = relevantEvents[i];
-      if (log.type === 'input' && log.startContainerText) {
-        baseTextForPreview = log.startContainerText.toString();
-        break;
-      }
-    }
-
-    // Extract event pairs for abnormal detection (snapshot용)
+    // Extract event pairs
     const allPairs = extractEventPairs(sortedAll);
-    const latestPair = allPairs.length > 0 ? allPairs[allPairs.length - 1] : null;
-    const lastBi = latestPair?.beforeInput ?? null;
-    const lastIn = latestPair?.input ?? null;
 
-    // Determine if we should apply abnormal styling based on recent snapshot
-    const snapshotAbnormalMap = new Map<EventLog, { class: string; info: string }>();
-    
-    if (this.recentSnapshot && this.recentSnapshot.trigger) {
-      const trigger = this.recentSnapshot.trigger;
-      const triggerDetail = this.recentSnapshot.triggerDetail || '';
-      const snapshotTime = this.recentSnapshot.timestamp;
-      
-      for (const log of relevantEvents) {
-        if (log.type === 'input' || log.type === 'beforeinput') {
-          const eventTime = log.timestamp;
-          const timeDiff = eventTime && snapshotTime ? Math.abs(eventTime - snapshotTime) : Infinity;
-          
-          if (timeDiff < 100) {
-            let abnormalClass = 'cev-phase-block--abnormal';
-            if (trigger === 'range-mapping-fail' || trigger.includes('range-mapping-fail')) {
-              abnormalClass = 'cev-phase-block--range-mapping-fail';
-            }
-            
-            let scenarioInfo = `⚠️ Scenario: ${trigger}`;
-            if (triggerDetail) {
-              scenarioInfo += ` - ${triggerDetail}`;
-            }
-            
-            snapshotAbnormalMap.set(log, { class: abnormalClass, info: scenarioInfo });
-          }
-        }
+    // Detect abnormalities for each pair
+    const detections = new Map<string, AbnormalDetection>();
+    allPairs.forEach((pair) => {
+      const detection = this.abnormalDetector.detectAbnormal(pair, previousState, sortedAll);
+      if (pair.eventKey) {
+        detections.set(pair.eventKey, detection);
       }
-    }
+    });
 
-    // Render events in chronological order (시간 순서대로 표시)
-    for (const log of relevantEvents) {
-      const deltaMs = log.timestamp != null && baseTs != null 
-        ? log.timestamp - baseTs 
-        : null;
-
-      let extraClassName: string | undefined;
-      let extraLines: string[] | undefined;
-      let beforeLog: EventLog | null = null;
-
-      if (log.type === 'input') {
-        // Check for abnormal styling from snapshot
-        const abnormalInfo = snapshotAbnormalMap.get(log);
-        if (abnormalInfo) {
-          extraClassName = abnormalInfo.class;
-          extraLines = [abnormalInfo.info];
-        } else {
-          // Check for parent/node mismatch with beforeinput
-          if (lastBi && lastIn && log === lastIn) {
-            const sameParent = (lastBi.parent?.id ?? '') === (lastIn.parent?.id ?? '');
-            const sameNode = (lastBi.node?.nodeName ?? '') === (lastIn.node?.nodeName ?? '');
-            
-            if (!sameParent || !sameNode) {
-              extraClassName = 'cev-phase-block--input-different';
-            }
-          }
-        }
-        beforeLog = lastBi;
-      }
-
-      const block = createPhaseBlock(
-        log.type.toUpperCase(),
-        log,
-        baseTextForPreview,
-        {
-          extraClassName,
-          timestampMs: log.timestamp ?? null,
-          deltaMs,
-          extraLines,
-          beforeLog,
-        }
-      );
-      
-      if (block) {
-        phaseContainer.appendChild(block);
-      }
-    }
-
-    // If no phases, show empty state
-    if (phaseContainer.children.length === 0) {
-      const emptyStateEl = document.createElement('div');
-      emptyStateEl.className = 'cev-empty-state';
-      emptyStateEl.textContent = 'No composition/beforeinput/input set';
-      phaseContainer.appendChild(emptyStateEl);
-    }
+    // Update history viewer
+    this.eventPairHistoryViewer.update(allPairs, detections, sortedAll);
   }
 
   updateSnapshots(snapshots: Snapshot[]): void {
